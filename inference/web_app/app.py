@@ -1319,15 +1319,22 @@ def sliding_window_inference(
     Footer fields appear at the bottom of long invoices and are
     typically truncated in a single-pass inference.
 
-    Algorithm:
-      1. Split word list into overlapping chunks (CHUNK_SIZE, STRIDE)
-      2. Run inference independently per chunk
-      3. Merge with overlap resolution:
-           - non-O beats O
-           - higher confidence wins on real-label conflicts
+def sliding_window_inference(
+    model,
+    processor,
+    id2label:   Dict[int, str],
+    pil_image:  Image.Image,
+    words:      List[str],
+    bboxes:     List[List[int]],
+    device:     str,
+    log:        logging.Logger,
+    model_name: str = "model",
+) -> Tuple[List[str], List[float]]:
     """
-    CHUNK_SIZE = 150   # ~450 subwords, safely under 512
-    STRIDE     = 75    # 50% overlap
+    Run model inference with sliding window using BATCHING for speed.
+    """
+    CHUNK_SIZE = 150
+    STRIDE     = 100
     MAX_CHUNKS = 8
 
     n_words = len(words)
@@ -1337,43 +1344,45 @@ def sliding_window_inference(
     final_labels = ["O"] * n_words
     final_confs  = [0.0]  * n_words
 
-    # Build chunk list
     chunks = []
     start  = 0
-    # BUG 14: Add boundary overlap to prevent dropping items at chunk edges.
-    # CHUNK_SIZE=200, STRIDE=100 (Balanced overlap for speed)
-    STRIDE = 100 
     while start < n_words and len(chunks) < MAX_CHUNKS:
         end = min(start + CHUNK_SIZE, n_words)
         chunks.append((start, end))
-        if end == n_words:
-            break
+        if end == n_words: break
         start += STRIDE
 
+    if not chunks: return final_labels, final_confs
+
+    # BATCH PREPARATION
+    batch_words  = [words[s:e] for s, e in chunks]
+    batch_bboxes = [bboxes[s:e] for s, e in chunks]
+    batch_images = [pil_image] * len(chunks)
+
+    encoding = processor(
+        images         = batch_images,
+        text           = batch_words,
+        boxes          = batch_bboxes,
+        truncation     = True,
+        padding        = True,
+        return_tensors = "pt",
+    )
+    
+    encoding_on_device = {k: v.to(device) for k, v in encoding.items()}
+
+    with torch.no_grad():
+        outputs     = model(**encoding_on_device)
+        predictions = outputs.logits.argmax(-1)        # (Batch, Seq)
+        probs       = torch.softmax(outputs.logits, dim=-1)
+        confidences = probs.max(-1).values             # (Batch, Seq)
+
+    # MERGE RESULTS
     non_o_total = 0
     for i, (start_idx, end_idx) in enumerate(chunks):
-        chunk_words  = words [start_idx:end_idx]
-        chunk_bboxes = bboxes[start_idx:end_idx]
+        word_ids = encoding.word_ids(batch_index=i)
+        preds    = predictions[i]
+        confs    = confidences[i]
 
-        encoding = processor(
-            images         = pil_image,
-            text           = chunk_words,
-            boxes          = chunk_bboxes,
-            truncation     = True,
-            padding        = True,
-            return_tensors = "pt",
-        )
-        word_ids           = encoding.word_ids(batch_index=0)
-        encoding_on_device = {k: v.to(device) for k, v in encoding.items()}
-
-        with torch.no_grad():
-            outputs     = model(**encoding_on_device)
-            predictions = outputs.logits.argmax(-1).squeeze(0)
-            probs       = torch.softmax(outputs.logits, dim=-1)
-            confidences = probs.max(-1).values.squeeze(0)
-
-        # Subword → word-level aggregation
-        # FIX 1 (consistent): first subword label authoritative, mean confidence
         chunk_word_labels: List[str]   = []
         chunk_word_confs:  List[float] = []
         current_word = None
@@ -1381,72 +1390,35 @@ def sliding_window_inference(
         temp_confs:  List[float] = []
 
         for idx, word_id in enumerate(word_ids):
-            if word_id is None:
-                continue
-            pred_id = predictions[idx].item()
-            conf    = confidences[idx].item()
+            if word_id is None: continue
+            p_id = preds[idx].item()
+            c    = confs[idx].item()
 
             if word_id != current_word:
                 if current_word is not None:
                     chunk_word_labels.append(id2label[temp_preds[0]])
                     chunk_word_confs.append(float(np.mean(temp_confs)))
                 current_word = word_id
-                temp_preds   = [pred_id]
-                temp_confs   = [conf]
+                temp_preds   = [p_id]
+                temp_confs   = [c]
             else:
-                temp_preds.append(pred_id)
-                temp_confs.append(conf)
-
+                temp_preds.append(p_id)
+                temp_confs.append(c)
         if temp_preds:
             chunk_word_labels.append(id2label[temp_preds[0]])
             chunk_word_confs.append(float(np.mean(temp_confs)))
 
-        non_o_chunk = sum(1 for l in chunk_word_labels if l != "O")
-        non_o_total += non_o_chunk
-        token_count  = sum(1 for wid in word_ids if wid is not None)
-
-        # FIX 3: actual logging via log param (was silently unused before)
-        log.debug(
-            "  [%s CHUNK %d/%d] words[%d:%d] tokens≈%d non-O=%d",
-            model_name, i + 1, len(chunks),
-            start_idx, end_idx, token_count, non_o_chunk,
-        )
-
-        # Overlap resolution & merge
-        conflicts = 0
+        # Conflict resolution
         for w_i, (lbl, conf) in enumerate(zip(chunk_word_labels, chunk_word_confs)):
             global_i = start_idx + w_i
-            if global_i >= n_words:
-                break
-
-            curr_lbl  = final_labels[global_i]
-            curr_conf = final_confs [global_i]
-
-            if curr_lbl == "O" and lbl != "O":
-                # Non-O always wins over O
+            if global_i >= n_words: break
+            if final_labels[global_i] == "O" or conf > final_confs[global_i]:
                 final_labels[global_i] = lbl
                 final_confs [global_i] = conf
-            elif curr_lbl != "O" and lbl != "O" and curr_lbl != lbl:
-                # Conflict: higher confidence wins
-                conflicts += 1
-                if conf > curr_conf:
-                    final_labels[global_i] = lbl
-                    final_confs [global_i] = conf
-            elif curr_lbl == lbl:
-                # Same label: keep higher confidence
-                if conf > curr_conf:
-                    final_confs[global_i] = conf
-            elif curr_lbl == "O" and lbl == "O":
-                if conf > curr_conf:
-                    final_confs[global_i] = conf
+        
+        non_o_total += sum(1 for l in chunk_word_labels if l != "O")
 
-        if conflicts:
-            log.debug(
-                "  [%s CHUNK %d/%d] %d conflict(s) resolved by confidence",
-                model_name, i + 1, len(chunks), conflicts,
-            )
-
-    log.debug("  [%s] Sliding window done — total non-O: %d", model_name, non_o_total)
+    log.debug("  [%s] Batch sliding window done — total non-O: %d", model_name, non_o_total)
     return final_labels, final_confs
 
 
@@ -1454,7 +1426,7 @@ def table_sliding_window_inference(
     model,
     processor,
     id2label:   Dict[int, str],
-    pil_image,
+    pil_image:  Image.Image,
     words:      List[str],
     bboxes:     List[List[int]],
     device:     str,
@@ -1462,11 +1434,10 @@ def table_sliding_window_inference(
     model_name: str = "table",
 ) -> Tuple[List[str], List[float]]:
     """
-    Run table model inference with sliding window.
-    CHUNK_SIZE=200, STRIDE=100, MAX_CHUNKS=10.
+    Run table model inference with sliding window using BATCHING.
     """
     CHUNK_SIZE = 200
-    STRIDE     = 120 # Balanced overlap (was 80)
+    STRIDE     = 120
     MAX_CHUNKS = 10
 
     n_words = len(words)
@@ -1481,32 +1452,40 @@ def table_sliding_window_inference(
     while start < n_words and len(chunks) < MAX_CHUNKS:
         end = min(start + CHUNK_SIZE, n_words)
         chunks.append((start, end))
-        if end == n_words:
-            break
+        if end == n_words: break
         start += STRIDE
 
-    log.info(f"[table-SW] {n_words} words → {len(chunks)} chunks")
+    if not chunks: return final_labels, final_confs
 
+    # BATCH PREPARATION
+    batch_words  = [words[s:e] for s, e in chunks]
+    batch_bboxes = [bboxes[s:e] for s, e in chunks]
+    batch_images = [pil_image] * len(chunks)
+
+    encoding = processor(
+        images         = batch_images,
+        text           = batch_words,
+        boxes          = batch_bboxes,
+        truncation     = True,
+        padding        = True,
+        return_tensors = "pt",
+    )
+    
+    encoding_on_device = {k: v.to(device) for k, v in encoding.items()}
+
+    log.info(f"[table-BATCH] {n_words} words → {len(chunks)} chunks in 1 pass")
+
+    with torch.no_grad():
+        outputs     = model(**encoding_on_device)
+        predictions = outputs.logits.argmax(-1)
+        probs       = torch.softmax(outputs.logits, dim=-1)
+        confidences = probs.max(-1).values
+
+    # MERGE
     for i, (start_idx, end_idx) in enumerate(chunks):
-        chunk_words  = words [start_idx:end_idx]
-        chunk_bboxes = bboxes[start_idx:end_idx]
-
-        encoding = processor(
-            images         = pil_image,
-            text           = chunk_words,
-            boxes          = chunk_bboxes,
-            truncation     = True,
-            padding        = True,
-            return_tensors = "pt",
-        )
-        word_ids           = encoding.word_ids(batch_index=0)
-        encoding_on_device = {k: v.to(device) for k, v in encoding.items()}
-
-        with torch.no_grad():
-            outputs     = model(**encoding_on_device)
-            predictions = outputs.logits.argmax(-1).squeeze(0)
-            probs       = torch.softmax(outputs.logits, dim=-1)
-            confidences = probs.max(-1).values.squeeze(0)
+        word_ids = encoding.word_ids(batch_index=i)
+        preds    = predictions[i]
+        confs    = confidences[i]
 
         chunk_word_labels: List[str]   = []
         chunk_word_confs:  List[float] = []
@@ -1515,49 +1494,30 @@ def table_sliding_window_inference(
         temp_confs:  List[float] = []
 
         for idx, word_id in enumerate(word_ids):
-            if word_id is None:
-                continue
-            pred_id = predictions[idx].item()
-            conf    = confidences[idx].item()
+            if word_id is None: continue
+            p_id = preds[idx].item()
+            c    = confs[idx].item()
 
             if word_id != current_word:
                 if current_word is not None:
                     chunk_word_labels.append(id2label[temp_preds[0]])
                     chunk_word_confs.append(float(np.mean(temp_confs)))
                 current_word = word_id
-                temp_preds   = [pred_id]
-                temp_confs   = [conf]
+                temp_preds   = [p_id]
+                temp_confs   = [c]
             else:
-                temp_preds.append(pred_id)
-                temp_confs.append(conf)
-
+                temp_preds.append(p_id)
+                temp_confs.append(c)
         if temp_preds:
             chunk_word_labels.append(id2label[temp_preds[0]])
             chunk_word_confs.append(float(np.mean(temp_confs)))
 
-        non_o_count = sum(1 for l in chunk_word_labels if l != "O")
-        token_count = sum(1 for wid in word_ids if wid is not None)
-        log.info(f"[CHUNK {i+1}/{len(chunks)}] words[{start_idx}:{end_idx}] "
-                 f"→ tokens≈{token_count} → non-O labels: {non_o_count}")
-
         for w_i, (lbl, conf) in enumerate(zip(chunk_word_labels, chunk_word_confs)):
             global_i = start_idx + w_i
-            if global_i >= n_words:
-                break
-            
-            curr_lbl  = final_labels[global_i]
-            curr_conf = final_confs [global_i]
-
-            if curr_lbl == "O" and lbl != "O":
+            if global_i >= n_words: break
+            if final_labels[global_i] == "O" or conf > final_confs[global_i]:
                 final_labels[global_i] = lbl
                 final_confs [global_i] = conf
-            elif curr_lbl != "O" and lbl != "O" and curr_lbl != lbl:
-                if conf > curr_conf:
-                    final_labels[global_i] = lbl
-                    final_confs [global_i] = conf
-            elif curr_lbl == lbl:
-                if conf > curr_conf:
-                    final_confs[global_i] = conf
 
     return final_labels, final_confs
 
