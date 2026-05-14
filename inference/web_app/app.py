@@ -77,6 +77,7 @@ import numpy as np
 from PIL import Image
 
 import torch
+torch.set_num_threads(1) # Prevent over-threading on CPU
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
 
 from flask import Flask, g, jsonify, render_template, request
@@ -1839,61 +1840,51 @@ def stage3_inference(
     """
     pil_image = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
-    import concurrent.futures
-
-    log.info("  Stage 3     Multi-model Parallel Inference (Local CPU)")
+    # Stage 3 - Sequential Batch Inference (Optimal for CPU)
+    log.info("  Stage 3 - Sequential Batch Inference (CPU Optimized)")
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        # 1. Header Task
-        header_task = executor.submit(
-            _run_single_model_inference,
-            processor  = mm.header_processor,
-            model      = mm.header_model,
-            id2label   = mm.header_id2label,
-            pil_image  = pil_image,
-            words      = words,
-            bboxes     = bboxes,
-            device     = mm.device,
-            log        = log,
-            model_name = "header"
-        )
-        
-        # 2. Table Task
-        table_task = executor.submit(
-            table_sliding_window_inference,
-            model      = mm.table_model,
-            processor  = mm.table_processor,
-            id2label   = mm.table_id2label,
-            pil_image  = pil_image,
-            words      = words,
-            bboxes     = bboxes,
-            device     = mm.device,
-            log        = log,
-            model_name = "table"
-        )
-        
-        # 3. Footer Task
-        footer_task = executor.submit(
-            sliding_window_inference,
-            model      = mm.footer_model,
-            processor  = mm.footer_processor,
-            id2label   = mm.footer_id2label,
-            pil_image  = pil_image,
-            words      = words,
-            bboxes     = bboxes,
-            device     = mm.device,
-            log        = log,
-            model_name = "footer"
-        )
-
-        # Wait for all
-        header_labels, header_confs = header_task.result()
-        table_labels, table_confs   = table_task.result()
-        footer_labels, footer_confs = footer_task.result()
+    # 3a. Header
+    header_labels, header_confs = _run_single_model_inference(
+        processor  = mm.header_processor,
+        model      = mm.header_model,
+        id2label   = mm.header_id2label,
+        pil_image  = pil_image,
+        words      = words,
+        bboxes     = bboxes,
+        device     = mm.device,
+        log        = log,
+        model_name = "header"
+    )
+    
+    # 3b. Table (Batch Optimized)
+    table_labels, table_confs = table_sliding_window_inference(
+        model      = mm.table_model,
+        processor  = mm.table_processor,
+        id2label   = mm.table_id2label,
+        pil_image  = pil_image,
+        words      = words,
+        bboxes     = bboxes,
+        device     = mm.device,
+        log        = log,
+        model_name = "table"
+    )
+    
+    # 3c. Footer (Batch Optimized)
+    footer_labels, footer_confs = sliding_window_inference(
+        model      = mm.footer_model,
+        processor  = mm.footer_processor,
+        id2label   = mm.footer_id2label,
+        pil_image  = pil_image,
+        words      = words,
+        bboxes     = bboxes,
+        device     = mm.device,
+        log        = log,
+        model_name = "footer"
+    )
 
     # Log reconstructed item count for validation
     sw_table_items = _reconstruct_items_from_labels(table_labels, table_confs, words)
-    log.info(f"[TABLE SLIDING WINDOW DONE] Total items reconstructed: {len(sw_table_items)}")
+    log.info(f"[TABLE BATCH DONE] Total items reconstructed: {len(sw_table_items)}")
 
     return header_labels, header_confs, table_labels, table_confs, footer_labels, footer_confs, sw_table_items
 
