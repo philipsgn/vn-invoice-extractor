@@ -1,27 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-╔══════════════════════════════════════════════════════════════════╗
-║           INVOICE EXTRACTION — PHASE 7 & 8 PRODUCTION           ║
-║                    Flask API Service                             ║
-╠══════════════════════════════════════════════════════════════════╣
-║  Phase 7 — Inference Pipeline                                    ║
-║    Stage 0  Input validation                                     ║
-║    Stage 1  Image preprocessing (normalize → synthetic standard) ║
-║    Stage 2  OCR  (PaddleOCR detect + VietOCR recognize)          ║
-║    Stage 3  LayoutLMv3 model inference                           ║
-║    Stage 4  BIO repair + InvoiceExtractionEngine                 ║
-║    Stage 5  Output formatting + field validators                 ║
-║                                                                  ║
-║  Phase 8 — Deployment                                            ║
-║    • Flask REST API                                              ║
-║    • Sync  : POST /api/v1/extract                                ║
-║    • Async : POST /api/v1/extract/async  →  GET /api/v1/jobs/:id ║
-║    • Rate limiting (token-bucket per IP)                         ║
-║    • Structured JSON logging                                     ║
-║    • In-memory metrics (/api/v1/metrics)                         ║
-║    • Swagger UI (/docs)                                          ║
-║    • Health + readiness checks                                   ║
-╚══════════════════════════════════════════════════════════════════╝
+                                                                                                                                                                                                           --
+              INVOICE EXTRACTION     PHASE 7 & 8 PRODUCTION              
+                       Flask API Service                                
+                                                                                                                                                                                                            
+     Phase 7     Inference Pipeline                                       
+       Stage 0  Input validation                                        
+       Stage 1  Image preprocessing (normalize -> synthetic standard)    
+       Stage 2  OCR  (PaddleOCR detect + VietOCR recognize)             
+       Stage 3  LayoutLMv3 model inference                              
+       Stage 4  BIO repair + InvoiceExtractionEngine                    
+       Stage 5  Output formatting + field validators                    
+                                                                        
+     Phase 8     Deployment                                               
+           Flask REST API                                                 
+           Sync  : POST /api/v1/extract                                   
+           Async : POST /api/v1/extract/async  ->  GET /api/v1/jobs/:id    
+           Rate limiting (token-bucket per IP)                            
+           Structured JSON logging                                        
+           In-memory metrics (/api/v1/metrics)                            
+           Swagger UI (/docs)                                             
+           Health + readiness checks                                      
+                                                                                                                                                                                                            
 
 Run:
     python app.py                                      # development
@@ -29,7 +29,7 @@ Run:
 
 Endpoints:
     POST   /api/v1/extract            Synchronous extraction
-    POST   /api/v1/extract/async      Submit async job → returns job_id
+    POST   /api/v1/extract/async      Submit async job -> returns job_id
     GET    /api/v1/jobs/<job_id>      Poll async job result
     GET    /api/v1/health             Liveness check
     GET    /api/v1/ready              Readiness check (model loaded?)
@@ -38,15 +38,15 @@ Endpoints:
     GET    /                          Web UI (upload form)
 """
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 0.  STDLIB  IMPORTS
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 import copy
 import gc
 import json
 import logging
 import os
-# ── Load .env FIRST — before any os.environ.get() calls ────────
+#        Load .env FIRST     before any os.environ.get() calls                         
 from pathlib import Path as _Path
 _ENV_FILE = _Path(__file__).parent / ".env"
 try:
@@ -54,7 +54,7 @@ try:
     _loaded = _load_dotenv(dotenv_path=_ENV_FILE, override=False)
 except ImportError:
     _loaded = False
-# ──────────────────────────────────────────────────────────────
+#                                                                                                                                                                                           
 import re
 import shutil
 import sys
@@ -69,9 +69,9 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 1.  THIRD-PARTY  IMPORTS
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 import cv2
 import numpy as np
 from PIL import Image
@@ -81,9 +81,9 @@ from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
 
 from flask import Flask, g, jsonify, render_template, request
 
-# ═══════════════════════════════════════════════════════════════════
-# 2.  PROJECT  ROOT  →  sys.path
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
+# 2.  PROJECT  ROOT  ->  sys.path
+#                                                                                                                                                                                                          
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -111,7 +111,7 @@ from inference.bio_repair_inference import (
 )
 from inference.image_preprocessor import normalize_invoice_image
 
-# ── Gemini Flash extractor (primary engine) ───────────────────
+#        Gemini Flash extractor (primary engine)                                                          
 try:
     from gemini_extractor import build_extractor as _build_gemini
     _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -127,12 +127,12 @@ except ImportError as _e:
     GEMINI_EXTRACTOR = None
     GEMINI_ENABLED   = False
     print(f"[Gemini] gemini_extractor not found: {_e}")
-# ──────────────────────────────────────────────────────────────
+#                                                                                                                                                                                           
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 3.  CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 class Config:
     """
     Central configuration.
@@ -186,9 +186,9 @@ class Config:
             d.mkdir(parents=True, exist_ok=True)
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 4.  STRUCTURED  LOGGING
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: Dict[str, Any] = {
@@ -228,9 +228,9 @@ def setup_logging(log_dir: Path) -> logging.Logger:
     return log
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 5.  METRICS  COLLECTOR
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 class Metrics:
     def __init__(self):
         self._lock               = threading.Lock()
@@ -299,9 +299,9 @@ class Metrics:
             }
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 6.  RATE  LIMITER  —  token-bucket per IP
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
+# 6.  RATE  LIMITER       token-bucket per IP
+#                                                                                                                                                                                                          
 class RateLimiter:
     def __init__(self, rpm: int):
         self.capacity  = rpm
@@ -322,9 +322,9 @@ class RateLimiter:
             return False
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 7.  MODEL  MANAGER  —  singleton, thread-safe lazy load
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
+# 7.  MODEL  MANAGER       singleton, thread-safe lazy load
+#                                                                                                                                                                                                          
 class ModelManager:
     _instance: Optional["ModelManager"] = None
     _class_lock = threading.Lock()
@@ -364,7 +364,7 @@ class ModelManager:
                     cls._instance = cls()
         return cls._instance
 
-    # ── Header Model Property ─────────────────────────────────────────
+    #        Header Model Property                                                                                                                            
     @property
     def header_processor(self) -> LayoutLMv3Processor:
         if self._header_processor is None: self._ensure_header()
@@ -379,7 +379,7 @@ class ModelManager:
         with self._lazy_lock:
             if self._header_model is not None: return
             p = Path(Config.MODEL_PATH_HEADER)
-            logger.info("⚡ Lazy-loading Header model from %s", p)
+            logger.info("    Lazy-loading Header model from %s", p)
             self._header_processor = LayoutLMv3Processor.from_pretrained(str(p), apply_ocr=False)
             self._header_model = LayoutLMv3ForTokenClassification.from_pretrained(str(p))
             self._header_model.to(self.device)
@@ -389,7 +389,7 @@ class ModelManager:
             with open(p / "id2label.json", encoding="utf-8") as f:
                 self.header_id2label = {int(k): v for k, v in json.load(f).items()}
 
-    # ── Table Model Property ──────────────────────────────────────────
+    #        Table Model Property                                                                                                                               
     @property
     def table_processor(self) -> LayoutLMv3Processor:
         if self._table_processor is None: self._ensure_table()
@@ -404,7 +404,7 @@ class ModelManager:
         with self._lazy_lock:
             if self._table_model is not None: return
             p = Path(Config.MODEL_PATH_TABLE)
-            logger.info("⚡ Lazy-loading Table model from %s", p)
+            logger.info("    Lazy-loading Table model from %s", p)
             self._table_processor = LayoutLMv3Processor.from_pretrained(str(p), apply_ocr=False)
             self._table_model = LayoutLMv3ForTokenClassification.from_pretrained(str(p))
             self._table_model.to(self.device)
@@ -414,7 +414,7 @@ class ModelManager:
             with open(p / "id2label.json", encoding="utf-8") as f:
                 self.table_id2label = {int(k): v for k, v in json.load(f).items()}
 
-    # ── Footer Model Property ──────────────────────────────────────────
+    #        Footer Model Property                                                                                                                               
     @property
     def footer_processor(self) -> LayoutLMv3Processor:
         if self._footer_processor is None: self._ensure_footer()
@@ -429,7 +429,7 @@ class ModelManager:
         with self._lazy_lock:
             if self._footer_model is not None: return
             p = Path(Config.MODEL_PATH_FOOTER)
-            logger.info("⚡ Lazy-loading Footer model from %s", p)
+            logger.info("    Lazy-loading Footer model from %s", p)
             self._footer_processor = LayoutLMv3Processor.from_pretrained(str(p), apply_ocr=False)
             self._footer_model = LayoutLMv3ForTokenClassification.from_pretrained(str(p))
             self._footer_model.to(self.device)
@@ -448,7 +448,7 @@ class ModelManager:
             try:
                 self._load_components(log)
                 self._ready = True
-                log.info("✅ ModelManager: Base components (OCR + Engine) loaded.")
+                log.info("  ... ModelManager: Base components (OCR + Engine) loaded.")
                 if not GEMINI_ENABLED:
                     log.info("   GEMINI_ENABLED=False -> Pre-warming local models...")
                     self._ensure_header()
@@ -460,7 +460,7 @@ class ModelManager:
                 raise
 
     def _load_components(self, log: logging.Logger):
-        # ── [1/5] OCR ─────────────────────────────────────────────
+        #        [1/5] OCR                                                                                                                                        
         log.info("[1/5] Loading OCR runner (PaddleOCR + VietOCR)...")
         t = time.monotonic()
         self.ocr_runner = OCRRunner(
@@ -470,7 +470,7 @@ class ModelManager:
         )
         log.info("      OCR ready in %.1fs", time.monotonic() - t)
 
-        # ── [5/5] Engine ───────────────────────────────────────────
+        #        [5/5] Engine                                                                                                                                  
         log.info("[5/5] Initializing InvoiceExtractionEngine...")
         self.engine = InvoiceExtractionEngine(
             vat_tolerance  = Config.VAT_TOLERANCE,
@@ -496,9 +496,9 @@ class ModelManager:
         return self._init_error
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 8.  ASYNC  JOB  QUEUE
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 class JobStatus:
     PENDING    = "pending"
     PROCESSING = "processing"
@@ -547,7 +547,7 @@ class AsyncJobQueue:
     def submit(self, job: Job, image_bytes: bytes) -> str:
         with self._cond:
             if len(self._queue) >= Config.JOB_QUEUE_MAXSIZE:
-                raise RuntimeError("Job queue is full — please try again later.")
+                raise RuntimeError("Job queue is full     please try again later.")
             self._jobs[job.job_id] = job
             self._queue.append((job, image_bytes))
             self._cond.notify()
@@ -584,9 +584,9 @@ class AsyncJobQueue:
                 del self._jobs[jid]
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 9.  PIPELINE  STAGES
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 
 class ValidationError(Exception):
     def __init__(self, message: str, http_status: int = 400):
@@ -601,10 +601,10 @@ class PipelineError(Exception):
         super().__init__(f"[Stage {stage}] {message}")
 
 
-# ──────────────────────────────────────────────────────────────────
-# MODULE-LEVEL HELPER — Clean garbled footer currency values
+#                                                                                                                                                                                                       
+# MODULE-LEVEL HELPER     Clean garbled footer currency values
 # FIX 2: Defined here once at module level, NOT inside stage4_postprocess
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 def clean_footer_value(raw_val) -> Optional[str]:
     """
     Clean garbled multi-token footer extraction values.
@@ -614,10 +614,10 @@ def clean_footer_value(raw_val) -> Optional[str]:
     This function keeps only the last token matching Vietnamese currency format.
 
     Examples:
-        "2 1.350.000"  → "1.350.000"
-        "0 0 0 6 8 0"  → None  (no valid currency pattern)
-        "1.080.000"    → "1.080.000"
-        None           → None
+        "2 1.350.000"  -> "1.350.000"
+        "0 0 0 6 8 0"  -> None  (no valid currency pattern)
+        "1.080.000"    -> "1.080.000"
+        None           -> None
     """
     if raw_val is None:
         return None
@@ -657,7 +657,7 @@ def clean_tax_code(raw: str) -> str:
     if re.fullmatch(r'\d{10}-\d{3}', s):
         return s
 
-    # 11-12 digits: likely OCR added 1-2 char prefix → try trimming
+    # 11-12 digits: likely OCR added 1-2 char prefix -> try trimming
     if len(digits_only) in (11, 12):
         for trim in range(1, 3):
             candidate = digits_only[trim:]
@@ -703,8 +703,8 @@ def is_noise_item(item: dict) -> bool:
         return True
 
     # Rule 3: Address fragment
-    addr_keywords = ["địa chỉ", "ngõ", "phường", "quận",
-                     "tỉnh", "huyện", "tp.", "p."]
+    addr_keywords = ["     a ch   ", "ng ", "ph     ng", "qu   n",
+                     "t   nh", "huy   n", "tp.", "p."]
     name_lower = name.lower()
     if any(kw in name_lower for kw in addr_keywords):
         return True
@@ -713,8 +713,8 @@ def is_noise_item(item: dict) -> bool:
     if len(name) < 4 and not has_value:
         return True
 
-    # Rule 5: Date unit keywords → date fragment mislabeled
-    date_units = ["ngày", "tháng", "năm", "day", "month", "year"]
+    # Rule 5: Date unit keywords -> date fragment mislabeled
+    date_units = ["ng y", "th ng", "n  m", "day", "month", "year"]
     if unit.lower() in date_units:
         return True
 
@@ -744,9 +744,9 @@ def is_noise_item(item: dict) -> bool:
 
     # Rule 9: Single Vietnamese word that appears in signature areas
     SIGNATURE_WORDS = {
-        "người", "nguoi", "thanh", "ký", "ky", "đại", "dai",
-        "diện", "dien", "giám", "giam", "đốc", "doc",
-        "kế", "ke", "toán", "toan", "trưởng", "truong"
+        "ng     i", "nguoi", "thanh", "k ", "ky", "     i", "dai",
+        "di   n", "dien", "gi m", "giam", "     c", "doc",
+        "k   ", "ke", "to n", "toan", "tr     ng", "truong"
     }
     if len(name.split()) == 1 and name.lower() in SIGNATURE_WORDS:
         return True
@@ -756,15 +756,15 @@ def is_noise_item(item: dict) -> bool:
     if name.lower().startswith("thanh ") and len(name.split()) <= 2:
         return True
 
-    # Rule 11 — Phone number field leaked into items
-    # Pattern: name starts with "điện thoại" OR contains
+    # Rule 11     Phone number field leaked into items
+    # Pattern: name starts with "  i   n tho   i" OR contains
     # standalone 10-digit Vietnamese phone number
     PHONE_PREFIXES = [
-        "điện thoại",   # full
-        "thoại",        # truncated: "Điện | thoại 09..."
+        "  i   n tho   i",   # full
+        "tho   i",        # truncated: "  i   n | tho   i 09..."
         "phone",
         "tel:",
-        "đt:",
+        "  t:",
         "fax:",
     ]
     phone_pattern  = re.compile(r'\b0[35789]\d{8}\b')
@@ -772,67 +772,67 @@ def is_noise_item(item: dict) -> bool:
     if any(name_lower.startswith(p) for p in PHONE_PREFIXES):
         return True
     if phone_pattern.search(name_raw) and len(name_raw.split()) <= 3:
-        # Short name containing only a phone number → noise
-        # (avoid killing items like "Máy điện thoại Samsung" with qty>0)
+        # Short name containing only a phone number -> noise
+        # (avoid killing items like "M y   i   n tho   i Samsung" with qty>0)
         qty = item.get("quantity", {})
         qty_val = qty.get("value", 0) if isinstance(qty, dict) else qty
         if qty_val == 0:
             return True
 
-    # Rule 12 — Payment method field leaked into items
+    # Rule 12     Payment method field leaked into items
     PAYMENT_FRAGMENTS = [
-        "hình thức thanh toán",
-        "hình thức tt",
+        "h nh th   c thanh to n",
+        "h nh th   c tt",
         "payment method",
-        "phương thức thanh toán",
+        "ph    ng th   c thanh to n",
     ]
     if any(frag in name_lower for frag in PAYMENT_FRAGMENTS):
         return True
 
-    # Rule 13 — Bank account field leaked into items
-    # Matches "số tài khoản XXXXXXXXX" with no real item data
-    BANK_PREFIXES = ["số tài khoản", "stk:", "account number"]
+    # Rule 13     Bank account field leaked into items
+    # Matches "s    t i kho   n XXXXXXXXX" with no real item data
+    BANK_PREFIXES = ["s    t i kho   n", "stk:", "account number"]
     is_bank_prefix = any(name_lower.startswith(p) for p in BANK_PREFIXES)
-    bank_number_only = re.compile(r'^(số tài khoản|tài khoản|stk:?)\s*\d+\s*$', re.I)
+    bank_number_only = re.compile(r'^(s    t i kho   n|t i kho   n|stk:?)\s*\d+\s*$', re.I)
     if bank_number_only.match(name_raw):
         return True
-    # If starts with bank prefix BUT has real text after → do NOT discard
+    # If starts with bank prefix BUT has real text after -> do NOT discard
     # Let clean_item_name() handle it instead (see FIX B)
 
-    # Rule 14 — Buyer label fragments
+    # Rule 14     Buyer label fragments
     BUYER_LABELS = [
-        "họ và tên người mua",
-        "họ tên người mua",
-        "tên đơn vị",
-        "thông tin người mua",
+        "h    v  t n ng     i mua",
+        "h    t n ng     i mua",
+        "t n     n v   ",
+        "th ng tin ng     i mua",
         "buyer information",
-        "mã số thuế người mua",
+        "m  s    thu    ng     i mua",
     ]
     if any(frag in name_lower for frag in BUYER_LABELS):
         return True
 
-    # Rule 15 — VAT footer summary rows (GTGT invoices)
-    # Patterns like "Thuế suất 10%:", "Không chịu thuế GTGT:", etc.
+    # Rule 15     VAT footer summary rows (GTGT invoices)
+    # Patterns like "Thu    su   t 10%:", "Kh ng ch   u thu    GTGT:", etc.
     # These are footer labels mislabeled as item names
     VAT_FOOTER_PATTERNS = [
-        r'^thuế suất\s+\d+%',           # "Thuế suất 10%:", "Thuế suất 8%:"
-        r'^không kê khai thuế',          # "Không kê khai thuế GTGT:"
-        r'^không chịu thuế',             # "Không chịu thuế GTGT:"
-        r'^hàng hóa không chịu thuế',   # variant
-        r'^hàng hóa miễn thuế',         # variant
-        r'^tổng tiền thanh toán',        # total label leaked
-        r'^cộng tiền hàng',              # subtotal label leaked
-        r'^thuế gtgt',                   # "Thuế GTGT:"
-        r'^tổng cộng$',                  # just "Tổng cộng"
+        r'^thu    su   t\s+\d+%',           # "Thu    su   t 10%:", "Thu    su   t 8%:"
+        r'^kh ng k  khai thu   ',          # "Kh ng k  khai thu    GTGT:"
+        r'^kh ng ch   u thu   ',             # "Kh ng ch   u thu    GTGT:"
+        r'^h ng h a kh ng ch   u thu   ',   # variant
+        r'^h ng h a mi  ...n thu   ',         # variant
+        r'^t   ng ti   n thanh to n',        # total label leaked
+        r'^c   ng ti   n h ng',              # subtotal label leaked
+        r'^thu    gtgt',                   # "Thu    GTGT:"
+        r'^t   ng c   ng$',                  # just "T   ng c   ng"
     ]
     for vat_pattern in VAT_FOOTER_PATTERNS:
         if re.search(vat_pattern, name_lower):
             return True
 
-    # Rule 16 — Tax code label row (not the actual tax code value)
-    # "Mã số thuế:" with no quantity/price = header label leaked
+    # Rule 16     Tax code label row (not the actual tax code value)
+    # "M  s    thu   :" with no quantity/price = header label leaked
     TAX_LABEL_PATTERNS = [
-        r'^mã số thuế\s*:',
+        r'^m  s    thu   \s*:',
         r'^mst\s*:',
         r'^tax\s+code\s*:',
     ]
@@ -840,9 +840,9 @@ def is_noise_item(item: dict) -> bool:
         if re.search(tax_pat, name_lower) and not has_value:
             return True
 
-    # Rule 17 — Numeric-only names that are amounts (e.g. "1.218.000")
+    # Rule 17     Numeric-only names that are amounts (e.g. "1.218.000")
     # These are unit_price values leaked into name field
-    # Pattern: contains only digits, dots, commas — no letters
+    # Pattern: contains only digits, dots, commas     no letters
     name_stripped = re.sub(r'[\d.,\s]', '', name)
     if len(name_stripped) == 0 and len(name) > 3:
         return True
@@ -886,28 +886,28 @@ def validate_and_fix_amounts(invoice: dict) -> dict:
     if total <= 0:
         return invoice  # Can't fix without total
 
-    # ─── RULE 0 (NEW — must be FIRST) ────────────────────────────
-    # If subtotal + vat ≈ total → already correct, exit immediately
+    #           RULE 0 (NEW     must be FIRST)                                                                                     
+    # If subtotal + vat     total -> already correct, exit immediately
     # PATCH: only exit early if vat is meaningful (> 1000)
     if subtotal > 0 and vat > 1_000:
         diff_ratio = abs((subtotal + vat) - total) / max(total, 1)
         if diff_ratio <= 0.01:
-            return invoice  # ✅ Perfect — do NOT modify anything
-    # ─────────────────────────────────────────────────────────────
+            return invoice  #   ... Perfect     do NOT modify anything
+    #                                                                                                                                                                                        
 
-    # Rule 1: VAT noise — impossibly small (< 1000 VND)
+    # Rule 1: VAT noise     impossibly small (< 1000 VND)
     if 0 < vat < 1_000:
         set_field(invoice, "vat_amount", 0)
         vat = 0
 
-    # Rule 2: subtotal LARGER than total → clearly wrong
+    # Rule 2: subtotal LARGER than total -> clearly wrong
     if subtotal > total:
         # This invoice likely has no VAT
         set_field(invoice, "subtotal", total)
         set_field(invoice, "vat_amount", 0)
         return invoice
 
-    # Rule 3: subtotal much smaller than total (< 50%) → wrong
+    # Rule 3: subtotal much smaller than total (< 50%) -> wrong
     if 0 < subtotal < total * 0.5:
         if vat > 0:
             # subtotal = total - vat (if that makes sense)
@@ -918,7 +918,7 @@ def validate_and_fix_amounts(invoice: dict) -> dict:
             set_field(invoice, "subtotal", total)
         return invoice
 
-    # Rule 4: subtotal + vat ≈ total (within 1%) → OK
+    # Rule 4: subtotal + vat     total (within 1%) -> OK
     if subtotal > 0:
         calc = subtotal + vat
         if abs(calc - total) / total <= 0.01:
@@ -943,8 +943,8 @@ def _recover_vat_from_totals(invoice: dict,
       C. subtotal present, vat = 0
 
     Disambiguation strategy (most reliable first):
-      1. If vat_rate string present → exact arithmetic (conf=0.85)
-      2. If items available → use items_sum to confirm VAT exists
+      1. If vat_rate string present -> exact arithmetic (conf=0.85)
+      2. If items available -> use items_sum to confirm VAT exists
       3. Rate heuristic: try 10% / 8% / 5%  (conf=0.70)
       4. Case D guard: skip recovery for confirmed no-VAT invoices
          using items_sum evidence, NOT invoice_type alone
@@ -952,7 +952,7 @@ def _recover_vat_from_totals(invoice: dict,
     Only fires when vat_amount < 1000 VND (noise level).
     """
 
-    # ── Helpers ──────────────────────────────────────────────────
+    #        Helpers                                                                                                                                                       
     def _parse(obj) -> int:
         v = obj.get("value", 0) if isinstance(obj, dict) else obj
         try:
@@ -978,7 +978,7 @@ def _recover_vat_from_totals(invoice: dict,
             return True
         return False
 
-    # ── Parse current values ──────────────────────────────────────
+    #        Parse current values                                                                                                                   
     total    = _parse(invoice.get("total_amount", {}))
     subtotal = _parse(invoice.get("subtotal",     {}))
     vat      = _parse(invoice.get("vat_amount",   {}))
@@ -996,7 +996,7 @@ def _recover_vat_from_totals(invoice: dict,
         if abs((subtotal + vat) - total) / total <= 0.01:
             return invoice
 
-    # ── Compute items_sum from table model output ─────────────────
+    #        Compute items_sum from table model output                                                    
     items_sum = 0
     if items:
         for item in items:
@@ -1010,7 +1010,7 @@ def _recover_vat_from_totals(invoice: dict,
             return False
         return abs(a - b) / b <= TOLERANCE
 
-    # ── Determine failure mode ────────────────────────────────────
+    #        Determine failure mode                                                                                                             
     is_mode_a = (subtotal == 0)
     is_mode_b = (subtotal > 0 and subtotal == total)
     is_mode_c = (0 < subtotal < total and vat == 0)
@@ -1018,7 +1018,7 @@ def _recover_vat_from_totals(invoice: dict,
     if not (is_mode_a or is_mode_b or is_mode_c):
         return invoice
 
-    # ── Strategy 1: vat_rate string ──────────────────────────────
+    #        Strategy 1: vat_rate string                                                                                           
     vat_rate_obj = invoice.get("vat_rate", {})
     vat_rate_str = (
         vat_rate_obj.get("value", "")
@@ -1039,29 +1039,29 @@ def _recover_vat_from_totals(invoice: dict,
         if _apply(rate_from_string, conf=0.85):
             return invoice
 
-    # ── Strategy 2: Items sum disambiguation ─────────────────────
+    #        Strategy 2: Items sum disambiguation                                                                
     VAT_RATES = [0.10, 0.08, 0.05]
 
     if items_sum > 0:
         if _near(items_sum, total):
-            # items_sum ≈ total → subtotal was set to total (wrong)
-            # VAT definitely exists → recover
+            # items_sum     total -> subtotal was set to total (wrong)
+            # VAT definitely exists -> recover
             for rate in VAT_RATES:
                 if _apply(rate, conf=0.75):
                     return invoice
 
         elif _near(items_sum, subtotal):
-            # items_sum ≈ subtotal → subtotal is CORRECT
-            # This is a genuine no-VAT invoice → do NOT recover
+            # items_sum     subtotal -> subtotal is CORRECT
+            # This is a genuine no-VAT invoice -> do NOT recover
             return invoice
 
-        # items_sum doesn't match either → inconclusive
+        # items_sum doesn't match either -> inconclusive
         # Fall through to rate heuristic below
 
-    # ── Strategy 3: Rate heuristic (no items or inconclusive) ────
+    #        Strategy 3: Rate heuristic (no items or inconclusive)             
     # Case D guard: only skip recovery if confirmed no-VAT
-    # via items_sum evidence above — do NOT use invoice_type alone
-    # because "Bán hàng" invoices CAN have VAT.
+    # via items_sum evidence above     do NOT use invoice_type alone
+    # because "B n h ng" invoices CAN have VAT.
     for rate in VAT_RATES:
         if _apply(rate, conf=0.65):
             return invoice
@@ -1069,9 +1069,9 @@ def _recover_vat_from_totals(invoice: dict,
     return invoice   # no strategy matched
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 0 — Input Validation
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# STAGE 0     Input Validation
+#                                                                                                                                                                                                       
 def stage0_validate(filename: str, file_bytes: bytes) -> str:
     """
     Validate uploaded file before any processing.
@@ -1098,19 +1098,19 @@ def stage0_validate(filename: str, file_bytes: bytes) -> str:
         arr = np.frombuffer(file_bytes, dtype=np.uint8)
         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         if img is None:
-            raise ValidationError("Cannot decode image — file may be corrupted.")
+            raise ValidationError("Cannot decode image     file may be corrupted.")
         h, w = img.shape[:2]
         if w < 100 or h < 100:
             raise ValidationError(
-                f"Image resolution too low ({w}×{h} px). Minimum: 100×100 px."
+                f"Image resolution too low ({w}*{h} px). Minimum: 100*100 px."
             )
 
     return ext
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 1 — Image Preprocessing
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# STAGE 1     Image Preprocessing
+#                                                                                                                                                                                                       
 def stage1_preprocess(
     image_bytes: bytes,
     ext:         str,
@@ -1150,7 +1150,7 @@ def stage1_preprocess(
 
             img_bgr, w, h = normalize_invoice_image(image_path=png_path, output_path=None)
             pages.append((img_bgr, w, h))
-            log.debug("  PDF page %d normalized → %d×%d", page_num + 1, w, h)
+            log.debug("  PDF page %d normalized -> %d*%d", page_num + 1, w, h)
 
         doc.close()
 
@@ -1164,14 +1164,14 @@ def stage1_preprocess(
 
         img_bgr, w, h = normalize_invoice_image(image_path=raw_path, output_path=None)
         pages.append((img_bgr, w, h))
-        log.debug("  Image normalized → %d×%d", w, h)
+        log.debug("  Image normalized -> %d*%d", w, h)
 
     return pages, temp_paths
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 2 — OCR (PaddleOCR + VietOCR)
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# STAGE 2     OCR (PaddleOCR + VietOCR)
+#                                                                                                                                                                                                       
 def stage2_ocr(
     mm:        ModelManager,
     img_bgr:   np.ndarray,
@@ -1182,8 +1182,8 @@ def stage2_ocr(
     log:       logging.Logger,
 ) -> Tuple[Dict, List[str], List[List[int]]]:
     """
-    OCR pipeline: PaddleOCR detect → VietOCR recognize → flatten tokens.
-    Returns: (ocr_result, words, bboxes[0–1000])
+    OCR pipeline: PaddleOCR detect -> VietOCR recognize -> flatten tokens.
+    Returns: (ocr_result, words, bboxes[0   1000])
     """
     norm_path = temp_dir / f"{file_stem}_norm.png"
     cv2.imwrite(str(norm_path), img_bgr)
@@ -1214,11 +1214,11 @@ def stage2_ocr(
     return ocr_result, words, bboxes
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 3a/3b — Single-pass LayoutLMv3 Inference (Header + Table)
-# FIX 1: Aligned subword aggregation — use first subword label (authoritative)
+#                                                                                                                                                                                                       
+# STAGE 3a/3b     Single-pass LayoutLMv3 Inference (Header + Table)
+# FIX 1: Aligned subword aggregation     use first subword label (authoritative)
 #         and mean confidence across subwords (consistent with sliding_window)
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 def _run_single_model_inference(
     processor,
     model,
@@ -1232,7 +1232,7 @@ def _run_single_model_inference(
 ) -> Tuple[List[str], List[float]]:
     """
     Run one LayoutLMv3 model (single pass, no sliding window).
-    Used for header and table — their fields appear near the top
+    Used for header and table     their fields appear near the top
     of the invoice and fit within the 512-token limit.
 
     Subword aggregation (FIX 1):
@@ -1290,19 +1290,19 @@ def _run_single_model_inference(
 
     non_o = sum(1 for l in word_labels if l != "O")
     log.debug(
-        "  [%s] %d words → %d non-O (%.0f%%)",
+        "  [%s] %d words -> %d non-O (%.0f%%)",
         model_name, len(word_labels), non_o,
         100.0 * non_o / max(len(word_labels), 1),
     )
     return word_labels, word_confs
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 3c — Sliding Window Inference (Footer)
+#                                                                                                                                                                                                       
+# STAGE 3c     Sliding Window Inference (Footer)
 # Handles LayoutLMv3 512-token limit for long Vietnamese invoices
 # CHUNK_SIZE=150 words (~450 subwords), STRIDE=75 words (50% overlap)
 # FIX 3: log param now used for per-chunk debug output
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 def sliding_window_inference(
     model,
     processor,
@@ -1418,7 +1418,7 @@ def sliding_window_inference(
         
         non_o_total += sum(1 for l in chunk_word_labels if l != "O")
 
-    log.debug("  [%s] Batch sliding window done — total non-O: %d", model_name, non_o_total)
+    log.debug("  [%s] Batch sliding window done     total non-O: %d", model_name, non_o_total)
     return final_labels, final_confs
 
 
@@ -1473,7 +1473,7 @@ def table_sliding_window_inference(
     
     encoding_on_device = {k: v.to(device) for k, v in encoding.items()}
 
-    log.info(f"[table-BATCH] {n_words} words → {len(chunks)} chunks in 1 pass")
+    log.info(f"[table-BATCH] {n_words} words -> {len(chunks)} chunks in 1 pass")
 
     with torch.no_grad():
         outputs     = model(**encoding_on_device)
@@ -1543,13 +1543,13 @@ def _normalize_unit_price_value(price_val) -> float:
         return result
     
     if isinstance(price_val, str):
-        # Vietnamese format: "2.878.435" → 2878435
+        # Vietnamese format: "2.878.435" -> 2878435
         price_str = price_val.strip()
         if not price_str:
             return 0.0
         
         # Fix: Remove OCR bleed - trailing space + "0" (VAT rate) from adjacent cell
-        # Example: "79.185 0" (where "0" is from VAT column) → "79.185"
+        # Example: "79.185 0" (where "0" is from VAT column) -> "79.185"
         price_str = re.sub(r'\s+0$', '', price_str)
         
         # Remove all dots and replace comma with dot (if present)
@@ -1581,9 +1581,9 @@ def _clean_reconstructed_name(name: str) -> str:
     Remove leading bank-account / phone-number prefix from item names.
 
     Contamination pattern (sliding window overlap with buyer info):
-      "tài khoản 10028280217981 Ổ cứng SSD Samsung 870 EVO 1TB"
-      "số tài khoản 1558329110900 Nước ngọt Pepsi 330ml"
-      "thoại 0928089778 Sản phẩm X"
+      "t i kho   n 10028280217981     c   ng SSD Samsung 870 EVO 1TB"
+      "s    t i kho   n 1558329110900 N     c ng   t Pepsi 330ml"
+      "tho   i 0928089778 S   n ph   m X"
 
     Strategy: find first 10-18 digit block (bank account or phone).
     Strip everything before it. Return remainder as clean name.
@@ -1591,8 +1591,8 @@ def _clean_reconstructed_name(name: str) -> str:
     Guards:
       - prefix must be <= 55 chars (label, not product description)
       - remainder must be > 5 chars (real product name)
-      - if no long digit block → return as-is (no change)
-      - if no remainder → return as-is (is_noise_item() will remove)
+      - if no long digit block -> return as-is (no change)
+      - if no remainder -> return as-is (is_noise_item() will remove)
 
     Unicode-safe: uses only digit detection, no Vietnamese matching.
     No external dependencies: pure re + str operations.
@@ -1602,7 +1602,7 @@ def _clean_reconstructed_name(name: str) -> str:
     if not name or not name.strip():
         return name
 
-    # Find: optional non-digit prefix (≤80 chars) + 10-18 digit block
+    # Find: optional non-digit prefix (   80 chars) + 10-18 digit block
     m = re.search(r'^\D{0,80}(\d{10,18})', name)
     if not m:
         return ' '.join(name.split())   # normalize whitespace, return
@@ -1613,13 +1613,13 @@ def _clean_reconstructed_name(name: str) -> str:
     prefix    = name[:digits_start].strip(' :,-\u2013\u2014\t')
     remainder = name[digits_end:].lstrip(' :,-\u2013\u2014\t')
 
-    # Guard: prefix too long → digits are part of product code, not label
+    # Guard: prefix too long -> digits are part of product code, not label
     if len(prefix) > 55:
         return ' '.join(name.split())
 
     rem_cleaned = ' '.join(remainder.split())
 
-    # Guard: remainder too short → pure noise, let is_noise_item() remove
+    # Guard: remainder too short -> pure noise, let is_noise_item() remove
     if len(rem_cleaned) <= 5:
         return name
 
@@ -1627,54 +1627,54 @@ def _clean_reconstructed_name(name: str) -> str:
 
 
 UNIT_PATTERNS = {
-    # ── Tools / Electronics (prioritize size indicator → Cái) ───
-    r'\b\d+\s*(w|watt)\b':             "Cái",    # 100W
-    r'\b\d+\s*inch\b':                 "Cái",    # 24 inch
-    r'\b\d+\s*(cổng|port)\b':          "Cái",    # 24 cổng
-    r'\b\d+\s*tầng\b':                 "Cái",    # 4 tầng
-    r'\b\d+\s*tấn\b':                  "Cái",    # 3 tấn (xe nâng)
-    r'\b\d+\s*kg\b':                   "Cái",    # 30kg scale
+    #        Tools / Electronics (prioritize size indicator -> C i)          
+    r'\b\d+\s*(w|watt)\b':             "C i",    # 100W
+    r'\b\d+\s*inch\b':                 "C i",    # 24 inch
+    r'\b\d+\s*(c   ng|port)\b':          "C i",    # 24 c   ng
+    r'\b\d+\s*t   ng\b':                 "C i",    # 4 t   ng
+    r'\b\d+\s*t   n\b':                  "C i",    # 3 t   n (xe n ng)
+    r'\b\d+\s*kg\b':                   "C i",    # 30kg scale
     
-    # ── OCR Corrections ──────────────────────────────
+    #        OCR Corrections                                                                                           
     r'\blkg\b':                        "Kg",     # OCR misread "1kg"
     
-    # ── Liquid / Volume ──────────────────────────────
+    #        Liquid / Volume                                                                                           
     r'\b\d+\s*ml\b':                   "Chai",   
-    r'\b\d+\s*lít\b':                  "Lít",    
-    r'\b\d+\s*l\b':                    "Lít",    
-    r'\b(lít|lit)\b':                  "Lít",    
+    r'\b\d+\s*l t\b':                  "L t",    
+    r'\b\d+\s*l\b':                    "L t",    
+    r'\b(l t|lit)\b':                  "L t",    
     r'\bml\b':                         "Chai",
     
-    # ── Weight (Pure units) ──────────────────────────
+    #        Weight (Pure units)                                                                               
     r'\bkg\b':                         "Kg",
-    r'\b(gram|tấn)\b':                 "Kg",     # general weight category
+    r'\b(gram|t   n)\b':                 "Kg",     # general weight category
     
-    # ── Length / Area ────────────────────────────────
-    r'\b(ống|pipe|tube)\b':            "m",      
-    r'\b(dây|cáp|cable|wire)\b':       "m",      
-    r'\b\d+\s*mm\b':                   "Cái",    
-    r'\b\d+\s*cm\b':                   "Cái",    
-    r'\b\d+\s*m\b(?!\d)':             "Cái",    
-    r'\b(m2|m²|mét vuông)\b':         "m²",
+    #        Length / Area                                                                                                 
+    r'\b(   ng|pipe|tube)\b':            "m",      
+    r'\b(d y|c p|cable|wire)\b':       "m",      
+    r'\b\d+\s*mm\b':                   "C i",    
+    r'\b\d+\s*cm\b':                   "C i",    
+    r'\b\d+\s*m\b(?!\d)':             "C i",    
+    r'\b(m2|m  |m t vu ng)\b':         "m  ",
     r'\bm\b':                          "m",
     
-    # ── Containers / Packaging ───────────────────────
-    r'\b(hộp|hop)\b':                  "Hộp",
-    r'\b(chai|bình|can)\b':            "Chai",
-    r'\b(túi|gói|bao|pack)\b':         "Gói",
-    r'\b(thùng|carton)\b':             "Thùng",
-    r'\b(cuộn|cuon|roll)\b':           "Cuộn",
-    r'\b(tấm|tam)\b':                  "Tấm",
+    #        Containers / Packaging                                                                      
+    r'\b(h   p|hop)\b':                  "H   p",
+    r'\b(chai|b nh|can)\b':            "Chai",
+    r'\b(t i|g i|bao|pack)\b':         "G i",
+    r'\b(th ng|carton)\b':             "Th ng",
+    r'\b(cu   n|cuon|roll)\b':           "Cu   n",
+    r'\b(t   m|tam)\b':                  "T   m",
     
-    # ── Sets / Units ─────────────────────────────────
-    r'\b(bộ|bo|set)\b':                "Bộ",
-    r'\b(đôi|pair)\b':                 "Đôi",
-    r'\b(viên|vien)\b':                "Viên",
-    r'\b(tờ|sheet)\b':                 "Tờ",
-    r'\b(cái|chiếc|chiec)\b':          "Chiếc",
-    r'\b(cây|cay)\b':                  "Cây",
-    r'\b(lốc|loc)\b':                  "Lốc",
-    r'\b(vỉ|vi)\b':                    "Vỉ",
+    #        Sets / Units                                                                                                    
+    r'\b(b   |bo|set)\b':                "B   ",
+    r'\b(   i|pair)\b':                 "   i",
+    r'\b(vi n|vien)\b':                "Vi n",
+    r'\b(t   |sheet)\b':                 "T   ",
+    r'\b(c i|chi   c|chiec)\b':          "Chi   c",
+    r'\b(c y|cay)\b':                  "C y",
+    r'\b(l   c|loc)\b':                  "L   c",
+    r'\b(v   |vi)\b':                    "V   ",
 }
 
 def _clean_reconstructed_unit(unit_str: str) -> str:
@@ -1716,20 +1716,20 @@ def _ensure_unit_and_price(items: list) -> list:
     if not items:
         return items
     
-    fallback_unit = _get_fallback_unit(items) or "Cái"
+    fallback_unit = _get_fallback_unit(items) or "C i"
     
     for item in items:
         if not isinstance(item, dict):
             continue
         
-        # ── Unit: guarantee always has value ──
+        #        Unit: guarantee always has value       
         if not isinstance(item.get("unit"), dict):
             item["unit"] = make_field(fallback_unit, 0.6)
         elif not str(item["unit"].get("value", "")).strip():
             item["unit"]["value"] = fallback_unit
             item["unit"]["confidence"] = 0.6
         
-        # ── Unit_price: calculate from total/qty if missing ──
+        #        Unit_price: calculate from total/qty if missing       
         qty = _safe_numeric(item.get("quantity", {}).get("value", 0) if isinstance(item.get("quantity"), dict) else item.get("quantity", 0))
         total = _safe_numeric(item.get("total", {}).get("value", 0) if isinstance(item.get("total"), dict) else item.get("total", 0))
         price = _safe_numeric(item.get("unit_price", {}).get("value", 0) if isinstance(item.get("unit_price"), dict) else item.get("unit_price", 0))
@@ -1770,7 +1770,7 @@ def _reconstruct_items_from_labels(labels: List[str], confs: List[float], words:
             return 0
         val_str = str(val_str).strip()
         # Fix: Remove OCR bleed - trailing space + "0" (VAT rate) from adjacent cell
-        # Example: "1000 0" → "1000"
+        # Example: "1000 0" -> "1000"
         val_str = re.sub(r'\s+0$', '', val_str)
         cleaned = val_str.replace('.', '').replace(',', '')
         try:
@@ -1890,9 +1890,9 @@ def _reconstruct_items_from_labels(labels: List[str], confs: List[float], words:
     return items
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 3 — Orchestrate triple inference
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# STAGE 3     Orchestrate triple inference
+#                                                                                                                                                                                                       
 def stage3_inference(
     mm:      ModelManager,
     img_bgr: np.ndarray,
@@ -1908,7 +1908,7 @@ def stage3_inference(
 
     import concurrent.futures
 
-    log.info("  Stage 3 — Multi-model Parallel Inference (Local CPU)")
+    log.info("  Stage 3     Multi-model Parallel Inference (Local CPU)")
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # 1. Header Task
@@ -1965,9 +1965,9 @@ def stage3_inference(
     return header_labels, header_confs, table_labels, table_confs, footer_labels, footer_confs, sw_table_items
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 4 — Post-Processing (BIO repair + Engine + Merge)
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# STAGE 4     Post-Processing (BIO repair + Engine + Merge)
+#                                                                                                                                                                                                       
 def _should_force_vat_zero(invoice: dict) -> bool:
     """
     Only force VAT=0 when ALL 3 conditions are true:
@@ -1999,7 +1999,7 @@ def _math_validate_items(items: list) -> None:
     """
     Validate mathematical consistency in normalized items.
     
-    Check: quantity × unit_price - discount = total
+    Check: quantity * unit_price - discount = total
     
     This is a post-normalization validation pass that logs warnings
     for inconsistencies but does NOT modify items.
@@ -2026,8 +2026,8 @@ def _math_validate_items(items: list) -> None:
                 if ratio < 0.95 or ratio > 1.05:
                     name = item.get("name", {}).get("value", f"item_{i}")
                     print(f"[MATH_WARN] {i}: '{name[:30]}' "
-                          f"math_inconsist: {qty}×{price}-{disc}={expected} "
-                          f"≠ total={total} (ratio={ratio:.2f})")
+                          f"math_inconsist: {qty}*{price}-{disc}={expected} "
+                          f"!= total={total} (ratio={ratio:.2f})")
         except Exception as e:
             print(f"[MATH_WARN] Error validating item {i}: {e}")
 
@@ -2037,12 +2037,12 @@ def _normalize_sw_items(sw_items: list) -> list:
     Normalize sw_items to standard pipeline schema.
 
     Handles ALL field formats:
-      Format A: {"value": "clean string", "confidence": 0.999}   → use directly
+      Format A: {"value": "clean string", "confidence": 0.999}   -> use directly
       Format B: {"value": "{'value': '...', 'confidence': 0.999}", "confidence": 0}
-                → parse inner dict, recover real value + confidence
-      Format C: missing field → use zero/empty default
+                -> parse inner dict, recover real value + confidence
+      Format C: missing field -> use zero/empty default
 
-    Also computes total from qty × unit_price when total=0.
+    Also computes total from qty * unit_price when total=0.
     """
     import ast, copy
 
@@ -2074,7 +2074,7 @@ def _normalize_sw_items(sw_items: list) -> list:
         for field, default in FIELD_DEFAULTS.items():
             norm[field] = _unwrap(item.get(field, default), default)
 
-        # BUG 3 FIX: compute total from qty × price when total=0
+        # BUG 3 FIX: compute total from qty * price when total=0
         total_val = norm["total"]["value"]
         if (not total_val or total_val == 0):
             qty   = norm["quantity"]["value"]   or 0
@@ -2095,9 +2095,9 @@ def _normalize_sw_items(sw_items: list) -> list:
                 else:
                     norm["total"]["confidence"] = 0.0
 
-        # ── BUG A FIX: detect unit/unit_price swap ──────────────
+        #        BUG A FIX: detect unit/unit_price swap                                           
         # If unit.value looks like a number AND unit_price.value is 0,
-        # the model mislabeled unit_price as unit → swap them back
+        # the model mislabeled unit_price as unit -> swap them back
         _unit_val   = norm["unit"]["value"]
         _price_val  = norm["unit_price"]["value"]
         _unit_conf  = norm["unit"]["confidence"]
@@ -2109,8 +2109,8 @@ def _normalize_sw_items(sw_items: list) -> list:
                 return True
             if isinstance(v, str):
                 # Handle Vietnamese number formats:
-                # "110.000,00" → strip dots and comma → "11000000" → numeric
-                # "Cái" → not numeric
+                # "110.000,00" -> strip dots and comma -> "11000000" -> numeric
+                # "C i" -> not numeric
                 cleaned = v.replace(".", "").replace(",", "").replace(":", "").strip()
                 try:
                     n = int(cleaned)
@@ -2124,7 +2124,7 @@ def _normalize_sw_items(sw_items: list) -> list:
                         return False
             return False
 
-        # ── Phase 15: ROBUST SWAP DETECTION ──
+        #        Phase 15: ROBUST SWAP DETECTION       
         if _looks_numeric(_unit_val):
             # Case A: unit.value is numeric (mislabeled price)
             if not _looks_numeric(_price_val) or _price_val == 0 or _price_conf == 0:
@@ -2142,7 +2142,7 @@ def _normalize_sw_items(sw_items: list) -> list:
         if "unit" in norm and isinstance(norm["unit"], dict):
             norm["unit"]["value"] = _clean_reconstructed_unit(norm["unit"]["value"])
             
-            # ── FIX 2: Default "Cái" for discrete items ────────────────
+            #        FIX 2: Default "C i" for discrete items                                                 
             if not norm["unit"]["value"]:
                 name = (norm.get("name", {}).get("value", "") or "").lower()
                 
@@ -2156,13 +2156,13 @@ def _normalize_sw_items(sw_items: list) -> list:
                         break
                 
                 if not matched_heuristic:
-                    # Only default "Cái" for clearly discrete countable items
+                    # Only default "C i" for clearly discrete countable items
                     price = _safe_numeric(norm.get("unit_price", {}).get("value", 0))
                     qty   = _safe_numeric(norm.get("quantity", {}).get("value", 0))
                     # Skip default if name suggests non-discrete item
-                    non_discrete = any(w in name for w in ["lít","ml","kg","gram","m2","m²","tấn", "m", "lit"])
+                    non_discrete = any(w in name for w in ["l t","ml","kg","gram","m2","m  ","t   n", "m", "lit"])
                     if price > 0 and qty > 0 and not non_discrete:
-                        norm["unit"]["value"]      = "Cái"
+                        norm["unit"]["value"]      = "C i"
                         norm["unit"]["confidence"] = 0.3
 
     
@@ -2200,7 +2200,7 @@ def _merge_extraction_results(
     """
     Deep-merge results from all three models with conflict detection (BUG 16).
 
-    Priority (highest → lowest):
+    Priority (highest -> lowest):
       header : seller, buyer, invoice metadata
       table  : items, totals (fills None header fields)
       footer : subtotal, vat_amount, total_amount
@@ -2238,7 +2238,7 @@ def _merge_extraction_results(
             if conflict:
                 conflicts.append(conflict)
 
-    # 2. Merge table → header (non-destructive)
+    # 2. Merge table -> header (non-destructive)
     if "invoice" in table_result:
         merged.setdefault("invoice", {})
         for k, v in table_result["invoice"].items():
@@ -2272,7 +2272,7 @@ def _merge_extraction_results(
             if conflict:
                 conflicts.append(conflict)
 
-    # 5. Merge footer → result (additive only)
+    # 5. Merge footer -> result (additive only)
     if "invoice" in footer_result:
         merged.setdefault("invoice", {})
         footer_inv = footer_result.get("invoice", {}) or {}
@@ -2324,9 +2324,9 @@ def stage4_postprocess(
       1. BIO repair on all three label sequences
       2. InvoiceExtractionEngine on each sequence
       3. Apply clean_footer_value() to footer currency fields
-      4. Three-way merge → strip_nested_prefixes → clean_company_fields
+      4. Three-way merge -> strip_nested_prefixes -> clean_company_fields
     """
-    # ── Header ────────────────────────────────────────────────────
+    #        Header                                                                                                                                                             
     repaired_header = repair_bio_sequence(header_labels, words=words, bboxes=bboxes)
     n_h = sum(1 for a, b in zip(header_labels, repaired_header) if a != b)
     if n_h:
@@ -2338,7 +2338,7 @@ def stage4_postprocess(
         "confidence":       header_confs,
     })
 
-    # ── Table ─────────────────────────────────────────────────────
+    #        Table                                                                                                                                                                
     repaired_table = repair_bio_sequence(table_labels, words=words, bboxes=bboxes)
     n_t = sum(1 for a, b in zip(table_labels, repaired_table) if a != b)
     if n_t:
@@ -2350,7 +2350,7 @@ def stage4_postprocess(
         "confidence":       table_confs,
     })
 
-    # ── Footer ────────────────────────────────────────────────────
+    #        Footer                                                                                                                                                             
     repaired_footer = repair_bio_sequence(footer_labels, words=words, bboxes=bboxes)
     n_f = sum(1 for a, b in zip(footer_labels, repaired_footer) if a != b)
     if n_f:
@@ -2369,13 +2369,13 @@ def stage4_postprocess(
             if k in footer_raw["invoice"]:
                 footer_raw["invoice"][k] = clean_footer_value(footer_raw["invoice"][k])
 
-    # ── Merge + clean ─────────────────────────────────────────────
+    #        Merge + clean                                                                                                                                        
     merged = _merge_extraction_results(header_raw, table_raw, footer_raw,
                                        sw_items=sw_items)
     result = strip_nested_prefixes(merged)
     result = clean_company_fields(result)
 
-    # ### FIX 1 — tax_code cleaning
+    # ### FIX 1     tax_code cleaning
     for party in ("seller", "buyer"):
         if party in result and "tax_code" in result[party]:
             result[party]["tax_code"] = clean_tax_code(result[party]["tax_code"])
@@ -2387,7 +2387,7 @@ def stage4_postprocess(
             if not is_noise_item(item)
         ]
 
-    # ### FIX 3 — amounts validation
+    # ### FIX 3     amounts validation
     if result.get("invoice"):
         result["invoice"] = validate_and_fix_amounts(result["invoice"])
         result["invoice"] = _recover_vat_from_totals(
@@ -2395,7 +2395,7 @@ def stage4_postprocess(
             items=result.get("items", [])
         )
 
-    # ### FIX 1 — Seller tax code contamination check
+    # ### FIX 1     Seller tax code contamination check
     def is_amount_not_taxcode(value: str, result: dict) -> bool:
         """Return True if this 'tax_code' is actually a money amount."""
         if not value:
@@ -2429,7 +2429,7 @@ def stage4_postprocess(
             else:
                 result[party]["tax_code"] = ""
 
-    # ### FIX 4 — Forced zero VAT check (Revised BUG 1)
+    # ### FIX 4     Forced zero VAT check (Revised BUG 1)
     if _should_force_vat_zero(result.get("invoice", {})):
         inv = result.get("invoice", {})
         total_obj = inv.get("total_amount", {})
@@ -2450,7 +2450,7 @@ def stage4_postprocess(
             else:
                 result["invoice"]["subtotal"] = total_val
 
-    # ### FIX 2 — Clean company names from year/garbage prefixes
+    # ### FIX 2     Clean company names from year/garbage prefixes
     def clean_company_name(name: str) -> str:
         if not name:
             return name
@@ -2460,9 +2460,9 @@ def stage4_postprocess(
         name = re.sub(r'^[\s:;\-\.\|]+', '', name).strip()
         # Remove known label prefixes
         prefixes = [
-            "VỊ:", "ĐƠN VỊ:", "SELLER:", "BUYER:",
-            "NGƯỜI MUA:", "NGƯỜI BÁN:", "ĐƠN VỊ BÁN:",
-            "ĐƠN VỊ MUA:", "THE ", "TEN:", "NAME:"
+            "V   :", "    N V   :", "SELLER:", "BUYER:",
+            "NG     I MUA:", "NG     I B N:", "    N V    B N:",
+            "    N V    MUA:", "THE ", "TEN:", "NAME:"
         ]
         name_upper = name.upper()
         for p in prefixes:
@@ -2480,7 +2480,7 @@ def stage4_postprocess(
             elif isinstance(obj, str) and obj:
                 result[party][field] = clean_company_name(obj)
 
-    # ### FIX 1B — Subtotal picks up tax_code digits check
+    # ### FIX 1B     Subtotal picks up tax_code digits check
     def _subtotal_is_taxcode(result: dict) -> bool:
         """Check if subtotal value suspiciously matches a tax code."""
         inv = result.get("invoice", {})
@@ -2506,7 +2506,7 @@ def stage4_postprocess(
             result["invoice"]["subtotal"] = total_val
 
     log.debug(
-        "  Stage4 done — header_non_O=%d  table_non_O=%d  footer_non_O=%d",
+        "  Stage4 done     header_non_O=%d  table_non_O=%d  footer_non_O=%d",
         sum(1 for l in repaired_header if l != "O"),
         sum(1 for l in repaired_table  if l != "O"),
         sum(1 for l in repaired_footer if l != "O"),
@@ -2515,11 +2515,11 @@ def stage4_postprocess(
     return result
 
 
-# ──────────────────────────────────────────────────────────────────
-# STAGE 5 — Output Formatting + Field Validators
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# STAGE 5     Output Formatting + Field Validators
+#                                                                                                                                                                                                       
 def _normalize_date(value: Any) -> Optional[str]:
-    """Normalize date string → ISO 8601 (YYYY-MM-DD)."""
+    """Normalize date string -> ISO 8601 (YYYY-MM-DD)."""
     if not value:
         return None
     s = str(value).strip()
@@ -2527,11 +2527,11 @@ def _normalize_date(value: Any) -> Optional[str]:
         return None
 
     vi_pattern = re.compile(
-        r"""(?:ng[aà]y\s+)?
+        r"""(?:ng[a ]y\s+)?
             (\d{1,2})\s+
-            th[aá]ng\s+
+            th[a ]ng\s+
             (\d{1,2})\s+
-            n[aă]m\s+
+            n[a  ]m\s+
             (\d{4})
         """,
         re.IGNORECASE | re.VERBOSE,
@@ -2554,7 +2554,7 @@ def _normalize_date(value: Any) -> Optional[str]:
 
 
 def _normalize_amount(value: Any) -> Optional[float]:
-    """Parse Vietnamese number format. "5.000.000" → 5000000.0"""
+    """Parse Vietnamese number format. "5.000.000" -> 5000000.0"""
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -2571,7 +2571,7 @@ def _normalize_amount(value: Any) -> Optional[float]:
 def _normalize_tax_code(value: Any) -> Optional[str]:
     if not value:
         return None
-    # FIX: handle confidence-field dict — extract inner value only
+    # FIX: handle confidence-field dict     extract inner value only
     if isinstance(value, dict) and "value" in value:
         inner = value.get("value", "")
         return str(inner).strip() if inner else None
@@ -2679,9 +2679,9 @@ def stage5_format(serialized: Dict, filename: str, elapsed_ms: float, validation
     return final
 
 
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 # Pipeline Orchestrator
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 def run_full_pipeline(
     image_bytes: bytes,
     filename:    str,
@@ -2700,16 +2700,16 @@ def run_full_pipeline(
         t   = time.monotonic()
         ext = stage0_validate(filename, image_bytes)
         met.record_stage("0_validate", (time.monotonic() - t) * 1000)
-        log.info("Stage 0 ✅ validate  ext=%s  size=%dB", ext, len(image_bytes))
+        log.info("Stage 0   ... validate  ext=%s  size=%dB", ext, len(image_bytes))
 
         t = time.monotonic()
         pages, _ = stage1_preprocess(image_bytes, ext, temp_dir, uid, log)
         met.record_stage("1_preprocess", (time.monotonic() - t) * 1000)
-        log.info("Stage 1 ✅ preprocess  pages=%d", len(pages))
+        log.info("Stage 1   ... preprocess  pages=%d", len(pages))
 
         img_bgr, w, h = pages[0]
 
-        # ── Stage 3+4 (PRIMARY): Gemini Flash ──────────────────────────────
+        #        Stage 3+4 (PRIMARY): Gemini Flash                                                                                           
         raw_result = None
         
         if GEMINI_ENABLED:
@@ -2732,37 +2732,37 @@ def run_full_pipeline(
                     try:
                         raw_result = GEMINI_EXTRACTOR.extract(
                             image_bytes=_gemini_bytes,
-                            ocr_words=None, # Defer OCR context — strictly multimodal
+                            ocr_words=None, # Defer OCR context     strictly multimodal
                             mime_type="image/jpeg",
                         )
                         if raw_result:
-                            log.info("Stage 3+4 ✅ Gemini done  items=%d", len(raw_result.get("items", [])))
+                            log.info("Stage 3+4   ... Gemini done  items=%d", len(raw_result.get("items", [])))
                             break
                     except Exception as gemini_err:
                         err_str = str(gemini_err)
                         is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
                         if is_rate_limit and attempt < MAX_RETRIES:
                             delay = RETRY_DELAYS[attempt]
-                            log.warning("[Gemini] Rate limit (attempt %d) — retrying in %ds", attempt + 1, delay)
+                            log.warning("[Gemini] Rate limit (attempt %d)     retrying in %ds", attempt + 1, delay)
                             time.sleep(delay)
                             continue
                         raise
                 
             except Exception as e:
-                log.warning(f"⚠️ Gemini extraction failed ({e}). Falling back to local LayoutLMv3 models...")
+                log.warning(f"       Gemini extraction failed ({e}). Falling back to local LayoutLMv3 models...")
                 raw_result = None
 
         # --- Local Model Extraction Logic (Fallback / Default) ---
         if raw_result is None:
             log.info("Executing local LayoutLMv3 pipeline (Stage 2, 3, 4)...")
 
-            # ── Stage 2: OCR (Only if LayoutLMv3 fallback required) ─────
+            #        Stage 2: OCR (Only if LayoutLMv3 fallback required)                
             t = time.monotonic()
             _, words, bboxes = stage2_ocr(mm, img_bgr, w, h, temp_dir, uid, log)
             met.record_stage("2_ocr", (time.monotonic() - t) * 1000)
-            log.info("Stage 2 ✅ ocr  words=%d", len(words))
+            log.info("Stage 2   ... ocr  words=%d", len(words))
 
-            # ── Stage 3: Inference ──────────────────────────────────────
+            #        Stage 3: Inference                                                                                                                   
             t = time.monotonic()
             (header_labels, header_confs,
              table_labels,  table_confs,
@@ -2771,13 +2771,13 @@ def run_full_pipeline(
             met.record_stage("3_inference", (time.monotonic() - t) * 1000)
             
             log.debug(
-                "  Stage 3 ✅ inference  header_non_O=%d  table_non_O=%d  footer_non_O=%d",
+                "  Stage 3   ... inference  header_non_O=%d  table_non_O=%d  footer_non_O=%d",
                 sum(1 for l in header_labels if l != "O"),
                 sum(1 for l in table_labels  if l != "O"),
                 sum(1 for l in footer_labels if l != "O"),
             )
 
-            # ── Stage 4: Post-processing ───────────────────────────────
+            #        Stage 4: Post-processing                                                                                              
             t = time.monotonic()
             raw_result = stage4_postprocess(
                 mm, words, bboxes,
@@ -2788,10 +2788,10 @@ def run_full_pipeline(
                 sw_items=sw_items,
             )
             met.record_stage("4_postprocess", (time.monotonic() - t) * 1000)
-            log.info("Stage 4 ✅ postprocess done")
-        # ── end stage 3+4 ───────────────────────────────────────────────────
+            log.info("Stage 4   ... postprocess done")
+        #        end stage 3+4                                                                                                                                                          
 
-        # ── Stage 5: Final Serialization & Validation ──────────────────────
+        #        Stage 5: Final Serialization & Validation                                                                   
         # Canonical entry point for consistent JSON structure (Bug 3 fixed)
 
         # 1. Base Serialization (Financial logic + Base Confidence)
@@ -2825,7 +2825,7 @@ def run_full_pipeline(
         elapsed_ms = (time.monotonic() - t_start) * 1000
         # Final formatting and enrichment (metadata, etc)
         final = stage5_format(final, filename, elapsed_ms, validation=validation)
-        log.info("Stage 5 ✅ format  total=%.0fms  status=%s",
+        log.info("Stage 5   ... format  total=%.0fms  status=%s",
                  elapsed_ms, final.get("status", "?"))
 
         return final
@@ -2835,9 +2835,9 @@ def run_full_pipeline(
         gc.collect()
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 10.  FLASK  APPLICATION  BOOTSTRAP
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 Config.init_dirs()
 
 logger    = setup_logging(Config.LOG_DIR)
@@ -2848,7 +2848,7 @@ job_queue = AsyncJobQueue(num_workers=1)
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = Config.MAX_UPLOAD_BYTES
 
-# Thư mục lưu ảnh preview cho Dashboard batch
+# Th   m   c l  u    nh preview cho Dashboard batch
 PREVIEW_FOLDER = Config.BASE_DIR / "static" / "temp_previews"
 PREVIEW_FOLDER.mkdir(parents=True, exist_ok=True)
 
@@ -2874,7 +2874,7 @@ def rate_limited(fn):
             if not limiter.is_allowed(ip):
                 logger.warning("Rate limited | ip=%s", ip)
                 return jsonify({
-                    "error":      "Too many requests — please wait before retrying.",
+                    "error":      "Too many requests     please wait before retrying.",
                     "code":       429,
                     "request_id": getattr(g, "request_id", "-"),
                 }), 429
@@ -2899,9 +2899,9 @@ def requires_model(fn):
     return wrapper
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 11.  ROUTES
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 
 @app.route("/")
 def index():
@@ -3046,11 +3046,11 @@ def get_metrics():
     return jsonify(metrics.snapshot())
 
 
-# ──────────────────────────────────────────────────────────────────
-# UI — Multi-image/PDF Upload (không dashboard)
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# UI     Multi-image/PDF Upload (kh ng dashboard)
+#                                                                                                                                                                                                       
 def _flatten_result(pipeline_result: dict, filename: str) -> dict:
-    """Chuyển output run_full_pipeline() thành dict phẳng cho template."""
+    """Chuy   n output run_full_pipeline() th nh dict ph   ng cho template."""
     def _val(obj, key, default=None):
         field = (obj or {}).get(key, {})
         if isinstance(field, dict):
@@ -3066,8 +3066,8 @@ def _flatten_result(pipeline_result: dict, filename: str) -> dict:
         "filename":      filename,
         "invoice_type":  invoice.get("type", "BAN_HANG"),
         "invoice_date":  _val(invoice, "date", ""),
-        "vendor_name":   _val(seller, "name", "Không xác định"),
-        "buyer_name":    _val(buyer,  "name", "Không xác định"),
+        "vendor_name":   _val(seller, "name", "Kh ng x c      nh"),
+        "buyer_name":    _val(buyer,  "name", "Kh ng x c      nh"),
         "vendor_tax_id": _val(seller, "tax_code", ""),
         "net_amount":    float(_val(invoice, "subtotal",     0) or 0),
         "vat_amount":    float(_val(invoice, "vat_amount",   0) or 0),
@@ -3080,7 +3080,7 @@ def _flatten_result(pipeline_result: dict, filename: str) -> dict:
 
 
 def _aggregate_batch(results: list) -> dict:
-    """Tổng hợp thống kê cho Dashboard Chart.js."""
+    """T   ng h   p th   ng k  cho Dashboard Chart.js."""
     grand_total = sum(r.get("total_amount", 0) for r in results)
     total_vat   = sum(r.get("vat_amount",   0) for r in results)
     timeline_map: dict = {}
@@ -3106,24 +3106,24 @@ def _aggregate_batch(results: list) -> dict:
 @requires_model
 def extract_multi():
     """
-    Upload nhiều ảnh/PDF cùng lúc → trích xuất từng file →
-    trả về trang kết quả (không phải dashboard, không có chart).
+    Upload nhi   u    nh/PDF c ng l c -> tr ch xu   t t   ng file ->
+    tr    v    trang k   t qu    (kh ng ph   i dashboard, kh ng c  chart).
     """
     req_id = getattr(g, "request_id", "-")
     files  = request.files.getlist("files")
     if not files:
-        return jsonify({"error": "Không có file nào được upload."}), 400
+        return jsonify({"error": "Kh ng c  file n o        c upload."}), 400
 
     results = []
     errors  = []
 
-    for f in files[:20]:  # tối đa 20 file một lần
+    for f in files[:20]:  # t   i   a 20 file m   t l   n
         if not f or not f.filename:
             continue
         filename    = f.filename
         image_bytes = f.read()
 
-        # Lưu ảnh preview
+        # L  u    nh preview
         try:
             preview_path = PREVIEW_FOLDER / filename
             preview_path.write_bytes(image_bytes)
@@ -3134,7 +3134,7 @@ def extract_multi():
             pipeline_result = run_full_pipeline(image_bytes, filename, logger, metrics)
             flat = _flatten_result(pipeline_result, filename)
             results.append(flat)
-            logger.info("MULTI | %s → status=%s  total=%.0f",
+            logger.info("MULTI | %s -> status=%s  total=%.0f",
                         filename, flat["status"], flat["total_amount"])
         except ValidationError as ve:
             errors.append({"filename": filename, "error": str(ve)})
@@ -3143,29 +3143,29 @@ def extract_multi():
             logger.error("MULTI error | %s: %s", filename, exc, exc_info=True)
 
     if not results and errors:
-        return jsonify({"error": "Không trích xuất được file nào.", "details": errors}), 400
+        return jsonify({"error": "Kh ng tr ch xu   t        c file n o.", "details": errors}), 400
 
     return render_template("results_multi.html", results=results, errors=errors)
 
 
-# ──────────────────────────────────────────────────────────────────
-# UI — ZIP Batch Upload → Dashboard
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
+# UI     ZIP Batch Upload -> Dashboard
+#                                                                                                                                                                                                       
 @app.route("/upload-zip", methods=["POST"])
 @requires_model
 def upload_zip():
     """
-    Upload file ZIP chứa các ảnh hóa đơn (VD: hóa đơn tháng) →
-    trích xuất từng ảnh → render Dashboard với Chart.js.
+    Upload file ZIP ch   a c c    nh h a     n (VD: h a     n th ng) ->
+    tr ch xu   t t   ng    nh -> render Dashboard v   i Chart.js.
     """
     if "file" not in request.files:
-        return jsonify({"error": "Thiếu file ZIP."}), 400
+        return jsonify({"error": "Thi   u file ZIP."}), 400
 
     zip_file = request.files["file"]
     if not zip_file or not zip_file.filename:
-        return jsonify({"error": "Tên file rỗng."}), 400
+        return jsonify({"error": "T n file r  --ng."}), 400
 
-    # Dọn preview cũ
+    # D   n preview c  
     for old in PREVIEW_FOLDER.iterdir():
         try:
             if old.is_file(): old.unlink()
@@ -3184,9 +3184,9 @@ def upload_zip():
             ][:20]
 
             if not image_entries:
-                return jsonify({"error": "Không tìm thấy ảnh (.png/.jpg/.jpeg) trong ZIP."}), 400
+                return jsonify({"error": "Kh ng t m th   y    nh (.png/.jpg/.jpeg) trong ZIP."}), 400
 
-            logger.info("[ZIP] %d ảnh từ: %s", len(image_entries), zip_file.filename)
+            logger.info("[ZIP] %d    nh t   : %s", len(image_entries), zip_file.filename)
 
             for entry in image_entries:
                 clean_name = Path(entry).name
@@ -3194,9 +3194,9 @@ def upload_zip():
                     continue
                 try:
                     img_bytes = zf.read(entry)
-                    # Lưu ảnh preview
+                    # L  u    nh preview
                     (PREVIEW_FOLDER / clean_name).write_bytes(img_bytes)
-                    # Chạy pipeline y hệt /api/v1/extract
+                    # Ch   y pipeline y h   t /api/v1/extract
                     pipeline_result = run_full_pipeline(
                         image_bytes = img_bytes,
                         filename    = clean_name,
@@ -3205,41 +3205,41 @@ def upload_zip():
                     )
                     flat = _flatten_result(pipeline_result, clean_name)
                     results.append(flat)
-                    logger.info("[ZIP] ✅ %s → total=%.0f  status=%s",
+                    logger.info("[ZIP]   ... %s -> total=%.0f  status=%s",
                                 clean_name, flat["total_amount"], flat["status"])
                 except ValidationError as ve:
                     errors.append(str(ve))
-                    logger.warning("[ZIP] ⚠️  %s: %s", clean_name, ve)
+                    logger.warning("[ZIP]         %s: %s", clean_name, ve)
                 except Exception as exc:
                     errors.append(f"{clean_name}: {exc}")
-                    logger.error("[ZIP] ❌ %s: %s", clean_name, exc, exc_info=True)
+                    logger.error("[ZIP]     %s: %s", clean_name, exc, exc_info=True)
 
     except zipfile.BadZipFile:
-        return jsonify({"error": "File không phải định dạng ZIP hợp lệ."}), 400
+        return jsonify({"error": "File kh ng ph   i      nh d   ng ZIP h   p l   ."}), 400
     except Exception as exc:
         logger.error("[ZIP] System error: %s", exc, exc_info=True)
-        return jsonify({"error": f"Lỗi hệ thống: {exc}"}), 500
+        return jsonify({"error": f"L  --i h    th   ng: {exc}"}), 500
 
     if not results:
-        return jsonify({"error": "Không trích xuất được kết quả nào.", "details": errors}), 400
+        return jsonify({"error": "Kh ng tr ch xu   t        c k   t qu    n o.", "details": errors}), 400
 
     summary = _aggregate_batch(results)
     summary["errors"] = errors
-    logger.info("[ZIP] Hoàn tất: %d/%d ảnh", len(results), len(image_entries))
+    logger.info("[ZIP] Ho n t   t: %d/%d    nh", len(results), len(image_entries))
 
     return render_template("dashboard.html", summary=summary, details=results)
 
 
 
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 # Swagger UI
-# ──────────────────────────────────────────────────────────────────
+#                                                                                                                                                                                                       
 SWAGGER_SPEC = {
     "openapi": "3.0.0",
     "info": {
         "title":       "Invoice Extraction API",
         "version":     "1.0.0",
-        "description": "Phase 7 & 8 — LayoutLMv3 Vietnamese invoice field extraction (triple-model)",
+        "description": "Phase 7 & 8     LayoutLMv3 Vietnamese invoice field extraction (triple-model)",
     },
     "paths": {
         "/api/v1/extract": {
@@ -3336,9 +3336,9 @@ SwaggerUIBundle({{
     return html, 200, {"Content-Type": "text/html"}
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 12.  GLOBAL  ERROR  HANDLERS
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 @app.errorhandler(400)
 def err_400(e):
     return jsonify({"error": "Bad Request", "detail": str(e)}), 400
@@ -3362,36 +3362,36 @@ def err_500(e):
     return jsonify({"error": "Internal server error."}), 500
 
 
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 # 13.  STARTUP
-# ═══════════════════════════════════════════════════════════════════
+#                                                                                                                                                                                                          
 def _warmup_model():
     try:
-        logger.info("⏳ Warming up models in background thread...")
+        logger.info("- Warming up models in background thread...")
         ModelManager.get().load(logger)
-        logger.info("🔥 All 3 models warm — ready to serve!")
+        logger.info("     All 3 models warm     ready to serve!")
     except Exception as exc:
-        logger.error("❌ Background model warmup FAILED: %s", exc)
+        logger.error("    Background model warmup FAILED: %s", exc)
 
 
 if __name__ == "__main__":
     banner = f"""
-╔══════════════════════════════════════════════════════╗
-║  🧾  Invoice Extraction API  —  Phase 7 & 8          ║
-╠══════════════════════════════════════════════════════╣
-║  Header : {Path(Config.MODEL_PATH_HEADER).name:<41}║
-║  Table  : {Path(Config.MODEL_PATH_TABLE).name:<41}║
-║  Footer : {Path(Config.MODEL_PATH_FOOTER).name:<41}║
-║  Device : {Config.DEVICE:<41}║
-║  Rate   : {str(Config.RATE_LIMIT_RPM) + ' req/min per IP':<41}║
-╠══════════════════════════════════════════════════════╣
-║  UI      http://localhost:{Config.PORT}/                    ║
-║  Sync    POST /api/v1/extract                        ║
-║  Async   POST /api/v1/extract/async                  ║
-║  Docs    http://localhost:{Config.PORT}/docs                ║
-║  Health  http://localhost:{Config.PORT}/api/v1/health       ║
-║  Metrics http://localhost:{Config.PORT}/api/v1/metrics      ║
-╚══════════════════════════════════════════════════════╝"""
+                                                                                                                                                                       --
+           Invoice Extraction API       Phase 7 & 8             
+                                                                                                                                                                        
+     Header : {Path(Config.MODEL_PATH_HEADER).name:<41}   
+     Table  : {Path(Config.MODEL_PATH_TABLE).name:<41}   
+     Footer : {Path(Config.MODEL_PATH_FOOTER).name:<41}   
+     Device : {Config.DEVICE:<41}   
+     Rate   : {str(Config.RATE_LIMIT_RPM) + ' req/min per IP':<41}   
+                                                                                                                                                                        
+     UI      http://localhost:{Config.PORT}/                       
+     Sync    POST /api/v1/extract                           
+     Async   POST /api/v1/extract/async                     
+     Docs    http://localhost:{Config.PORT}/docs                   
+     Health  http://localhost:{Config.PORT}/api/v1/health          
+     Metrics http://localhost:{Config.PORT}/api/v1/metrics         
+                                                                                                                                                                        """
     try:
         print(banner)
     except UnicodeEncodeError:
@@ -3404,6 +3404,6 @@ if __name__ == "__main__":
         host         = Config.HOST,
         port         = Config.PORT,
         debug        = Config.DEBUG,
-        use_reloader = False,   # ⚠️ MUST be False — reloader causes double model load
+        use_reloader = False,   #        MUST be False     reloader causes double model load
         threaded     = True,
     )
