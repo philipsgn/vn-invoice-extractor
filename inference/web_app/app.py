@@ -1589,7 +1589,7 @@ def _clean_reconstructed_name(name: str) -> str:
     Strip everything before it. Return remainder as clean name.
 
     Guards:
-      - prefix must be ≤ 55 chars (label, not product description)
+      - prefix must be <= 55 chars (label, not product description)
       - remainder must be > 5 chars (real product name)
       - if no long digit block → return as-is (no change)
       - if no remainder → return as-is (is_noise_item() will remove)
