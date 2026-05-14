@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Invoice ZIP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-6">
+    <div class="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full border border-slate-100">
+        <div class="text-center mb-8">
+            <div class="bg-indigo-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-slate-800">Tải lên File ZIP</h1>
+            <p class="text-slate-500 mt-2">Hỗ trợ tối đa 20 file hóa đơn (PNG, JPG)</p>
+        </div>
+
+        <form action="/upload-zip" method="POST" enctype="multipart/form-data" class="space-y-6">
+            <div class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-indigo-400 transition cursor-pointer">
+                <input type="file" name="file" accept=".zip" class="hidden" id="fileInput" onchange="updateFileName()">
+                <label for="fileInput" class="cursor-pointer">
+                    <span id="fileName" class="text-slate-600 font-medium">Nhấn để chọn file .zip</span>
+                </label>
+            </div>
+            
+            <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-indigo-700 transition transform hover:-translate-y-1 active:scale-95">
+                BẮT ĐẦU PHÂN TÍCH
+            </button>
+        </form>
+
+        <div class="mt-8 pt-6 border-t border-slate-100">
+            <div class="flex items-center text-sm text-slate-400 justify-center">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                Xử lý bảo mật in-memory
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateFileName() {
+            const input = document.getElementById('fileInput');
+            const label = document.getElementById('fileName');
+            if (input.files.length > 0) {
+                label.innerText = input.files[0].name;
+            }
+        }
+    </script>
+</body>
+</html>

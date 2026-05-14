@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Phân tích Hóa đơn - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .modal-bg { background: rgba(15, 23, 42, 0.6); }
+        .invoice-row:hover { background-color: rgba(99, 102, 241, 0.05); }
+    </style>
+</head>
+<body class="bg-[#F8FAFC] text-slate-800 min-h-screen">
+
+    <div class="max-w-7xl mx-auto px-6 py-10">
+        <!-- Header -->
+        <div class="flex justify-between items-end mb-10">
+            <div>
+                <h1 class="text-4xl font-bold text-slate-900 tracking-tight">Invoice Analytics</h1>
+                <p class="text-slate-500 mt-2 text-lg">Phân tích chuyên sâu từ {{ details|length }} hóa đơn đã tải lên</p>
+            </div>
+            <a href="/" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-1">
+                Tải tệp mới
+            </a>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div class="glass-card p-8 rounded-[32px] border-l-8 border-emerald-500 shadow-sm">
+                <p class="text-slate-500 font-medium uppercase tracking-wider text-sm">Tổng thanh toán</p>
+                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ "{:,.0f}".format(summary.grand_total) }} <span class="text-lg font-normal text-slate-400 ml-1">VND</span></h3>
+            </div>
+            <div class="glass-card p-8 rounded-[32px] border-l-8 border-blue-500 shadow-sm">
+                <p class="text-slate-500 font-medium uppercase tracking-wider text-sm">Tổng thuế VAT</p>
+                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ "{:,.0f}".format(summary.total_vat) }} <span class="text-lg font-normal text-slate-400 ml-1">VND</span></h3>
+            </div>
+            <div class="glass-card p-8 rounded-[32px] border-l-8 border-indigo-500 shadow-sm">
+                <p class="text-slate-500 font-medium uppercase tracking-wider text-sm">Số lượng hóa đơn</p>
+                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ details|length }} <span class="text-lg font-normal text-slate-400 ml-1">Tệp</span></h3>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+            <div class="glass-card p-8 rounded-[32px] shadow-sm">
+                <h4 class="text-xl font-bold mb-6">Tỷ lệ Loại Hóa Đơn</h4>
+                <div class="h-[300px] flex items-center justify-center">
+                    <canvas id="donutChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-card p-8 rounded-[32px] shadow-sm">
+                <h4 class="text-xl font-bold mb-6">Xu hướng Chi tiêu</h4>
+                <div class="h-[300px]">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Table -->
+        <div class="glass-card rounded-[32px] overflow-hidden shadow-sm border border-slate-200">
+            <div class="p-8 border-b border-slate-100 flex justify-between items-center">
+                <h4 class="text-xl font-bold">Danh sách chi tiết</h4>
+                <span class="text-sm bg-slate-100 px-4 py-2 rounded-full text-slate-600 font-medium italic">Nhấn vào dòng để xem ảnh và chỉnh sửa</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-50/50 text-slate-500 uppercase text-xs font-bold tracking-widest">
+                        <tr>
+                            <th class="px-8 py-5">Ảnh</th>
+                            <th class="px-8 py-5">Ngày</th>
+                            <th class="px-8 py-5">Nhà cung cấp / Bên mua</th>
+                            <th class="px-8 py-5">Loại</th>
+                            <th class="px-8 py-5 text-right">Tổng tiền (VND)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for item in details %}
+                        <tr class="invoice-row cursor-pointer transition-colors" onclick='openModal({{ loop.index0 }})'>
+                            <td class="px-8 py-4">
+                                <div class="w-12 h-12 rounded-xl overflow-hidden bg-slate-200 border border-slate-100">
+                                    <img src="{{ item.image_url }}" class="w-full h-full object-cover">
+                                </div>
+                            </td>
+                            <td class="px-8 py-4 font-semibold text-slate-700">{{ item.invoice_date }}</td>
+                            <td class="px-8 py-4">
+                                <div class="flex flex-col gap-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] bg-slate-200 px-1 rounded font-bold text-slate-500">BÁN</span>
+                                        <div class="font-bold text-slate-900 truncate max-w-[200px]">{{ item.vendor_name }}</div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] bg-indigo-100 px-1 rounded font-bold text-indigo-500">MUA</span>
+                                        <div class="text-sm text-slate-600 truncate max-w-[200px]">{{ item.buyer_name }}</div>
+                                    </div>
+                                    <div class="text-xs text-slate-400 mt-1">MST: {{ item.vendor_tax_id }}</div>
+                                </div>
+                            </td>
+                            <td class="px-8 py-4">
+                                <span class="px-3 py-1 rounded-full text-xs font-bold {{ 'bg-emerald-100 text-emerald-700' if item.invoice_type == 'GTGT' else 'bg-blue-100 text-blue-700' }}">
+                                    {{ item.invoice_type }}
+                                </span>
+                            </td>
+                            <td class="px-8 py-4 text-right font-bold text-indigo-600 text-lg">
+                                {{ "{:,.0f}".format(item.total_amount) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Review & Edit -->
+    <div id="editModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 modal-bg backdrop-blur-sm" onclick="closeModal()"></div>
+        <div class="relative glass-card bg-white rounded-[40px] shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row animate-in fade-in zoom-in duration-300">
+            
+            <!-- Left: Image Preview -->
+            <div class="md:w-3/5 bg-slate-900 flex items-center justify-center p-4 border-r border-slate-100">
+                <img id="modalImg" src="" class="max-h-[80vh] max-w-full object-contain rounded-lg shadow-2xl shadow-black/50">
+            </div>
+
+            <!-- Right: Edit Form -->
+            <div class="md:w-2/5 p-10 overflow-y-auto">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-bold text-slate-900">Chi tiết hóa đơn</h2>
+                    <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2" stroke-linecap="round"></path></svg>
+                    </button>
+                </div>
+
+                <div class="space-y-5">
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Loại hóa đơn</label>
+                        <select id="m_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition">
+                            <option value="GTGT">Hóa đơn GTGT (VAT)</option>
+                            <option value="BAN_HANG">Hóa đơn Bán hàng</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Nhà cung cấp (Bên bán)</label>
+                        <input id="m_vendor" type="text" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition font-bold">
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Đơn vị mua (Bên mua)</label>
+                        <input id="m_buyer" type="text" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition font-medium">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Mã số thuế</label>
+                            <input id="m_tax" type="text" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-1">Ngày hóa đơn</label>
+                            <input id="m_date" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition">
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-slate-100">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-slate-500">Tiền hàng (Net)</span>
+                            <input id="m_net" type="number" class="text-right font-bold text-slate-900 bg-transparent focus:outline-none w-1/2">
+                        </div>
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-slate-500">Tiền thuế (VAT)</span>
+                            <input id="m_vat" type="number" class="text-right font-bold text-slate-900 bg-transparent focus:outline-none w-1/2">
+                        </div>
+                        <div class="flex justify-between items-center py-4 bg-indigo-50 rounded-2xl px-5">
+                            <span class="font-bold text-indigo-600">TỔNG THANH TOÁN</span>
+                            <input id="m_total" type="number" class="text-right font-bold text-indigo-700 bg-transparent focus:outline-none text-xl w-1/2">
+                        </div>
+                    </div>
+
+                    <button onclick="saveChanges()" class="w-full bg-slate-900 text-white font-bold py-5 rounded-2xl hover:bg-black transition shadow-xl mt-6">
+                        XÁC NHẬN & LƯU
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dữ liệu từ Backend
+        const rawData = {{ details | tojson }};
+        let currentIndex = -1;
+
+        // --- Chart.js Config ---
+        const ctxDonut = document.getElementById('donutChart');
+        new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: {
+                labels: ['GTGT', 'Bán hàng'],
+                datasets: [{
+                    data: [{{ summary.count_gtgt }}, {{ summary.count_banhang }}],
+                    backgroundColor: ['#10b981', '#3b82f6'],
+                    borderWidth: 0,
+                    cutout: '75%'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        const ctxLine = document.getElementById('lineChart');
+        new Chart(ctxLine, {
+            type: 'line',
+            data: {
+                labels: {{ summary.chart_timeline | map(attribute='date') | list | tojson }},
+                datasets: [{
+                    label: 'Tổng tiền',
+                    data: {{ summary.chart_timeline | map(attribute='total') | list | tojson }},
+                    borderColor: '#6366f1',
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)'
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                scales: { y: { ticks: { callback: v => (v/1e6).toFixed(1) + 'M' } } }
+            }
+        });
+
+        // --- Modal Logic ---
+        function openModal(index) {
+            currentIndex = index;
+            const item = rawData[index];
+            
+            document.getElementById('modalImg').src = item.image_url;
+            document.getElementById('m_type').value = item.invoice_type;
+            document.getElementById('m_vendor').value = item.vendor_name;
+            document.getElementById('m_buyer').value = item.buyer_name || "Không xác định";
+            document.getElementById('m_tax').value = item.vendor_tax_id;
+            document.getElementById('m_date').value = item.invoice_date;
+            document.getElementById('m_net').value = item.net_amount;
+            document.getElementById('m_vat').value = item.vat_amount;
+            document.getElementById('m_total').value = item.total_amount;
+            
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        function saveChanges() {
+            // Logic lưu thay đổi vào mảng (Client-side demo)
+            alert("Đã cập nhật dữ liệu hóa đơn: " + rawData[currentIndex].filename);
+            closeModal();
+            // Bạn có thể thêm API call ở đây để lưu vào Database nếu cần
+        }
+    </script>
+</body>
+</html>

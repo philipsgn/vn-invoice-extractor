@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kết quả trích xuất hóa đơn</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --card:     #22263a;
+      --border:   #2e3250;
+      --accent:   #6c63ff;
+      --accent2:  #00d4aa;
+      --warn:     #ff6b6b;
+      --text:     #e2e8f0;
+      --muted:    #8892a4;
+      --radius:   14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a1d27 0%, #22263a 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header h1 { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+    .back-btn {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 18px; border-radius: 8px;
+      text-decoration: none; font-size: 0.85rem; transition: all .2s;
+    }
+    .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Main ── */
+    main { max-width: 1400px; margin: 0 auto; padding: 32px 24px; }
+
+    .summary-bar {
+      display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 32px;
+    }
+    .stat-pill {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 50px; padding: 10px 22px;
+      font-size: 0.85rem; color: var(--muted);
+    }
+    .stat-pill strong { color: var(--accent2); font-weight: 700; }
+
+    /* ── Invoice Card ── */
+    .invoice-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 28px;
+      overflow: hidden; transition: border-color .2s;
+    }
+    .invoice-card:hover { border-color: var(--accent); }
+
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 22px; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .card-header .fname { font-weight: 600; font-size: 1rem; }
+    .badge {
+      font-size: 0.72rem; font-weight: 700; padding: 4px 10px;
+      border-radius: 20px; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .badge-ok     { background: rgba(0,212,170,.15); color: var(--accent2); }
+    .badge-partial { background: rgba(255,193,7,.15);  color: #ffc107; }
+    .badge-error  { background: rgba(255,107,107,.15); color: var(--warn); }
+
+    .card-body { display: grid; grid-template-columns: 280px 1fr; gap: 0; }
+
+    /* ── Preview Image ── */
+    .img-panel {
+      padding: 16px; border-right: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: center;
+    }
+    .img-panel img {
+      width: 100%; max-width: 260px; border-radius: 8px;
+      border: 1px solid var(--border); object-fit: contain;
+    }
+
+    /* ── Fields Panel ── */
+    .fields-panel { padding: 20px; }
+
+    .fields-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      margin-bottom: 20px;
+    }
+    .field-item label {
+      font-size: 0.7rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .6px; display: block; margin-bottom: 4px;
+    }
+    .field-item input {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 7px; padding: 8px 12px;
+      font-size: 0.88rem; font-family: inherit; outline: none;
+      transition: border-color .2s;
+    }
+    .field-item input:focus { border-color: var(--accent); }
+    .field-item.full-width { grid-column: 1 / -1; }
+
+    .amounts-row {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 16px;
+    }
+    .amount-cell { text-align: center; }
+    .amount-cell .label { font-size: 0.7rem; color: var(--muted); margin-bottom: 6px; }
+    .amount-cell .value { font-size: 1.1rem; font-weight: 700; color: var(--accent2); }
+
+    /* ── Items Table ── */
+    .items-section { margin-top: 16px; }
+    .items-section h4 { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { background: var(--surface); color: var(--muted); text-align: left; padding: 8px 10px; font-weight: 500; border-bottom: 1px solid var(--border); }
+    td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,.04); color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(108,99,255,.06); }
+
+    /* ── Errors ── */
+    .error-section {
+      background: rgba(255,107,107,.08); border: 1px solid rgba(255,107,107,.3);
+      border-radius: var(--radius); padding: 16px 20px; margin-bottom: 24px;
+    }
+    .error-section h3 { color: var(--warn); font-size: 0.9rem; margin-bottom: 10px; }
+    .error-section li { font-size: 0.82rem; color: var(--muted); margin-left: 20px; margin-bottom: 4px; }
+
+    /* ── Confidence bar ── */
+    .conf-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .conf-bar-track { flex: 1; height: 4px; background: var(--border); border-radius: 2px; }
+    .conf-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+    .conf-bar span { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+    @media (max-width: 768px) {
+      .card-body { grid-template-columns: 1fr; }
+      .img-panel { border-right: none; border-bottom: 1px solid var(--border); }
+      .fields-grid { grid-template-columns: 1fr; }
+      .amounts-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📄 Kết quả Trích xuất Hóa đơn</h1>
+  <a href="/" class="back-btn">← Trở về</a>
+</header>
+
+<main>
+
+  <!-- Summary Bar -->
+  <div class="summary-bar">
+    <div class="stat-pill">Tổng: <strong>{{ results|length }} hóa đơn</strong></div>
+    <div class="stat-pill">
+      Thành công: <strong>{{ results|selectattr('status','ne','error')|list|length }}</strong>
+    </div>
+    {% if errors %}
+    <div class="stat-pill">Lỗi: <strong style="color:var(--warn)">{{ errors|length }}</strong></div>
+    {% endif %}
+  </div>
+
+  <!-- Errors -->
+  {% if errors %}
+  <div class="error-section">
+    <h3>⚠️ Các file không xử lý được:</h3>
+    <ul>
+      {% for e in errors %}
+      <li>{{ e.filename if e is mapping else e }} — {{ e.error if e is mapping else '' }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- Invoice Cards -->
+  {% for inv in results %}
+  <div class="invoice-card">
+    <div class="card-header">
+      <span class="fname">📎 {{ inv.filename }}</span>
+      <span class="badge badge-{{ inv.status }}">{{ inv.status }}</span>
+    </div>
+
+    <div class="card-body">
+      <!-- Image Preview -->
+      <div class="img-panel">
+        <img src="{{ inv.image_url }}" alt="{{ inv.filename }}"
+             onerror="this.style.display='none'" />
+      </div>
+
+      <!-- Fields -->
+      <div class="fields-panel">
+        <!-- Amounts -->
+        <div class="amounts-row">
+          <div class="amount-cell">
+            <div class="label">Tiền hàng (Net)</div>
+            <div class="value">{{ "{:,.0f}".format(inv.net_amount) }} ₫</div>
+          </div>
+          <div class="amount-cell">
+            <div class="label">Thuế VAT</div>
+            <div class="value">{{ "{:,.0f}".format(inv.vat_amount) }} ₫</div>
+          </div>
+          <div class="amount-cell">
+            <div class="label">Tổng thanh toán</div>
+            <div class="value" style="color:#fff;font-size:1.25rem">
+              {{ "{:,.0f}".format(inv.total_amount) }} ₫
+            </div>
+          </div>
+        </div>
+
+        <!-- Meta fields -->
+        <div class="fields-grid">
+          <div class="field-item">
+            <label>Loại hóa đơn</label>
+            <input value="{{ inv.invoice_type }}" />
+          </div>
+          <div class="field-item">
+            <label>Ngày hóa đơn</label>
+            <input value="{{ inv.invoice_date or '' }}" />
+          </div>
+          <div class="field-item">
+            <label>Nhà cung cấp</label>
+            <input value="{{ inv.vendor_name }}" />
+          </div>
+          <div class="field-item">
+            <label>Mã số thuế NCC</label>
+            <input value="{{ inv.vendor_tax_id or '' }}" />
+          </div>
+          <div class="field-item full-width">
+            <label>Bên mua</label>
+            <input value="{{ inv.buyer_name }}" />
+          </div>
+        </div>
+
+        <!-- Confidence -->
+        <div class="conf-bar">
+          <span>Độ tin cậy</span>
+          <div class="conf-bar-track">
+            <div class="conf-bar-fill" style="width:{{ (inv.confidence * 100)|int }}%"></div>
+          </div>
+          <span>{{ (inv.confidence * 100)|int }}%</span>
+        </div>
+
+        <!-- Items Table -->
+        {% if inv.line_items %}
+        <div class="items-section">
+          <h4>Chi tiết hàng hoá / dịch vụ ({{ inv.line_items|length }} dòng)</h4>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Tên hàng hoá / dịch vụ</th>
+                <th>ĐVT</th>
+                <th>SL</th>
+                <th>Đơn giá</th>
+                <th>Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in inv.line_items %}
+              {% set nm = item.name.value  if item.name  is mapping else item.get('name','') %}
+              {% set ut = item.unit.value  if item.unit  is mapping else item.get('unit','') %}
+              {% set qt = item.quantity.value if item.quantity is mapping else item.get('quantity',0) %}
+              {% set pr = item.unit_price.value if item.unit_price is mapping else item.get('unit_price',0) %}
+              {% set tt = item.total.value if item.total is mapping else item.get('total',0) %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ nm }}</td>
+                <td>{{ ut }}</td>
+                <td>{{ qt }}</td>
+                <td>{{ "{:,.0f}".format(pr|float) }}</td>
+                <td><strong>{{ "{:,.0f}".format(tt|float) }}</strong></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+
+      </div><!-- /fields-panel -->
+    </div><!-- /card-body -->
+  </div><!-- /invoice-card -->
+  {% endfor %}
+
+</main>
+</body>
+</html>

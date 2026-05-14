@@ -1,0 +1,8 @@
+google-generativeai
+python-dotenv
+flask
+numpy
+opencv-python
+pillow
+torch
+transformers

@@ -1,0 +1,23 @@
+{
+  "0": "B-ITEM_NAME",
+  "1": "B-ITEM_UNIT",
+  "2": "B-ITEM_QUANTITY",
+  "3": "B-ITEM_UNIT_PRICE",
+  "4": "B-ITEM_TOTAL_PRICE",
+  "5": "B-ITEM_DISCOUNT",
+  "6": "B-ITEM_VAT_RATE",
+  "7": "B-ITEM_LINE_TAX",
+  "8": "B-ITEM_ROW_TOTAL",
+
+  "9": "I-ITEM_NAME",
+  "10": "I-ITEM_UNIT",
+  "11": "I-ITEM_QUANTITY",
+  "12": "I-ITEM_UNIT_PRICE",
+  "13": "I-ITEM_TOTAL_PRICE",
+  "14": "I-ITEM_DISCOUNT",
+  "15": "I-ITEM_VAT_RATE",
+  "16": "I-ITEM_LINE_TAX",
+  "17": "I-ITEM_ROW_TOTAL",
+
+  "18": "O"
+}

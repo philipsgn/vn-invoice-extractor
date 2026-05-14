@@ -1,0 +1,9 @@
+{
+    "B-SUBTOTAL": 0,
+    "B-VAT_AMOUNT": 1,
+    "B-GRAND_TOTAL": 2,
+    "I-SUBTOTAL": 3,
+    "I-VAT_AMOUNT": 4,
+    "I-GRAND_TOTAL": 5,
+    "O": 6
+}
