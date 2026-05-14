@@ -248,7 +248,7 @@
         {% if inv.line_items %}
         <div class="items-section">
           <h4>Chi tiết hàng hoá / dịch vụ ({{ inv.line_items|length }} dòng)</h4>
-          <table>
+          <table id="table-{{ loop.index0 }}">
             <thead>
               <tr>
                 <th>#</th>
@@ -266,13 +266,13 @@
               {% set qt = item.quantity.value if item.quantity is mapping else item.get('quantity',0) %}
               {% set pr = item.unit_price.value if item.unit_price is mapping else item.get('unit_price',0) %}
               {% set tt = item.total.value if item.total is mapping else item.get('total',0) %}
-              <tr>
+              <tr class="item-row">
                 <td>{{ loop.index }}</td>
-                <td>{{ nm }}</td>
-                <td>{{ ut }}</td>
-                <td>{{ qt }}</td>
-                <td>{{ "{:,.0f}".format(pr|float) }}</td>
-                <td><strong>{{ "{:,.0f}".format(tt|float) }}</strong></td>
+                <td contenteditable="true" class="edit-name">{{ nm }}</td>
+                <td contenteditable="true" class="edit-unit">{{ ut }}</td>
+                <td contenteditable="true" class="edit-qty">{{ qt }}</td>
+                <td contenteditable="true" class="edit-price">{{ "{:.0f}".format(pr|float) }}</td>
+                <td contenteditable="true" class="edit-total"><strong>{{ "{:.0f}".format(tt|float) }}</strong></td>
               </tr>
               {% endfor %}
             </tbody>
@@ -280,11 +280,62 @@
         </div>
         {% endif %}
 
+        <!-- Save Button -->
+        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+          <button onclick="saveInvoice('{{ inv.filename }}', {{ loop.index0 }})" 
+                  style="background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            💾 Lưu thay đổi
+          </button>
+        </div>
+
       </div><!-- /fields-panel -->
     </div><!-- /card-body -->
   </div><!-- /invoice-card -->
   {% endfor %}
 
 </main>
+
+<script>
+async function saveInvoice(filename, index) {
+  const card = document.querySelectorAll('.invoice-card')[index];
+  
+  // 1. Collect line items from table
+  const rows = card.querySelectorAll('.item-row');
+  const line_items = [];
+  rows.forEach(row => {
+    line_items.push({
+      name:       { value: row.querySelector('.edit-name').innerText.trim() },
+      unit:       { value: row.querySelector('.edit-unit').innerText.trim() },
+      quantity:   { value: parseFloat(row.querySelector('.edit-qty').innerText) || 0 },
+      unit_price: { value: parseFloat(row.querySelector('.edit-price').innerText) || 0 },
+      total:      { value: parseFloat(row.querySelector('.edit-total').innerText) || 0 }
+    });
+  });
+
+  // 2. Prepare payload
+  const payload = {
+    filename: filename,
+    line_items: line_items
+  };
+
+  // 3. Send to API
+  try {
+    const resp = await fetch('/api/v1/update-result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const res = await resp.json();
+    if (res.status === 'success') {
+      alert('Đã lưu kết quả thành công cho: ' + filename);
+    } else {
+      alert('Lỗi: ' + res.error);
+    }
+  } catch (err) {
+    alert('Lỗi hệ thống: ' + err);
+  }
+}
+</script>
+
 </body>
 </html>

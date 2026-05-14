@@ -2835,6 +2835,81 @@ def index():
 @app.route("/api/v1/extract", methods=["POST"])
 @rate_limited
 @requires_model
+def _save_extraction_json(filename: str, result: dict):
+    """
+    Save the full extraction result to extracted_json/ folder.
+    """
+    try:
+        json_dir = Path("extracted_json")
+        json_dir.mkdir(exist_ok=True)
+        # Use filename as base, remove extension, add .json
+        base_name = Path(filename).stem
+        save_path = json_dir / f"{base_name}.json"
+        
+        # Add metadata
+        result["_saved_at"] = datetime.now().isoformat()
+        result["_filename"] = filename
+        
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        return str(save_path)
+    except Exception as e:
+        print(f"Error saving JSON for {filename}: {e}")
+        return None
+
+@app.route("/api/v1/update-result", methods=["POST"])
+def update_result():
+    """
+    API to update an existing extraction result (including table items).
+    Updates the JSON file in extracted_json/.
+    """
+    try:
+        data = request.json
+        filename = data.get("filename")
+        if not filename:
+            return jsonify({"error": "Missing filename"}), 400
+            
+        json_dir = Path("extracted_json")
+        base_name = Path(filename).stem
+        save_path = json_dir / f"{base_name}.json"
+        
+        if not save_path.exists():
+            return jsonify({"error": f"Result file for {filename} not found"}), 404
+            
+        # Load existing
+        with open(save_path, "r", encoding="utf-8") as f:
+            result = json.load(f)
+            
+        # Update flat fields (this assumes a certain structure in the saved JSON)
+        # For simplicity, we update the top-level result or the 'invoice' section
+        if "invoice" in result:
+            # Mapping from UI names to internal schema
+            mapping = {
+                "invoice_type": "type",
+                "invoice_date": "date",
+                "vendor_name": ["seller", "name"],
+                "vendor_tax_id": ["seller", "tax_code"],
+                "buyer_name": ["buyer", "name"],
+                "total_amount": "total_amount",
+                "net_amount": "subtotal",
+                "vat_amount": "vat_amount"
+            }
+            # ... (Full logic to update nested dict based on UI fields)
+        
+        # Or even simpler: just save the data as-is if the UI sends the whole object
+        # Since we want to be "Senior", let's handle the items update specifically
+        if "line_items" in data:
+            result["items"] = data["line_items"]
+            
+        # Save back
+        result["_updated_at"] = datetime.now().isoformat()
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({"status": "success", "message": f"Updated {filename}"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 def extract_sync():
     req_id = getattr(g, "request_id", "-")
 
@@ -3056,6 +3131,7 @@ def extract_multi():
 
         try:
             pipeline_result = run_full_pipeline(image_bytes, filename, logger, metrics)
+            _save_extraction_json(filename, pipeline_result)
             flat = _flatten_result(pipeline_result, filename)
             results.append(flat)
             logger.info("MULTI | %s -> status=%s  total=%.0f",
@@ -3127,6 +3203,7 @@ def upload_zip():
                         log         = logger,
                         met         = metrics,
                     )
+                    _save_extraction_json(clean_name, pipeline_result)
                     flat = _flatten_result(pipeline_result, clean_name)
                     results.append(flat)
                     logger.info("[ZIP]   ... %s -> total=%.0f  status=%s",
