@@ -1303,21 +1303,6 @@ def _run_single_model_inference(
 # CHUNK_SIZE=150 words (~450 subwords), STRIDE=75 words (50% overlap)
 # FIX 3: log param now used for per-chunk debug output
 #                                                                                                                                                                                                       
-def sliding_window_inference(
-    model,
-    processor,
-    id2label:   Dict[int, str],
-    pil_image,
-    words:      List[str],
-    bboxes:     List[List[int]],
-    device:     str,
-    log:        logging.Logger,
-    model_name: str = "footer",
-) -> Tuple[List[str], List[float]]:
-    """
-    Sliding window inference bypassing LayoutLMv3 512-token limit.
-    Footer fields appear at the bottom of long invoices and are
-    typically truncated in a single-pass inference.
 
 def sliding_window_inference(
     model,
