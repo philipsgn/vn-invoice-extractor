@@ -523,3 +523,32 @@ def compute_document_confidence(final: Dict[str, Any]) -> float:
     doc_conf = base - penalty
     doc_conf = max(0.0, min(1.0, doc_conf))
     return round(doc_conf, 4)
+
+
+def merge_with_conflict_log(path: str, val1: Any, conf1: float, val2: Any, conf2: float):
+    """
+    Merge two extraction results for a field.
+    Returns: (winner_val, winner_conf, conflict_info_or_none)
+    """
+    if not val1 and not val2:
+        return None, 0.0, None
+    if not val1:
+        return val2, conf2, None
+    if not val2:
+        return val1, conf1, None
+
+    s1 = str(val1).strip().lower()
+    s2 = str(val2).strip().lower()
+
+    if s1 == s2:
+        return val1, max(conf1, conf2), None
+
+    # Conflict! Pick higher confidence
+    winner_val, winner_conf = (val1, conf1) if conf1 >= conf2 else (val2, conf2)
+    conflict = {
+        "field":  path,
+        "val1":   val1, "conf1": conf1,
+        "val2":   val2, "conf2": conf2,
+        "winner": winner_val,
+    }
+    return winner_val, winner_conf, conflict
