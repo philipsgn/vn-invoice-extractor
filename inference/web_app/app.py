@@ -3181,10 +3181,10 @@ def upload_zip():
     if "file" not in request.files:
         return jsonify({"error": "Thi   u file ZIP."}), 400
 
-    job_id   = request.form.get("job_id", str(uuid.uuid4()))
+    job_id = request.form.get("job_id") or request.args.get("job_id") or str(uuid.uuid4())
     zip_file = request.files["file"]
     if not zip_file or not zip_file.filename:
-        return jsonify({"error": "T n file r  --ng."}), 400
+        return jsonify({"error": "Tên file rỗng."}), 400
 
     # Initialize status
     JOB_STATUS[job_id] = {
@@ -3194,6 +3194,7 @@ def upload_zip():
         "start_time": time.time(),
         "status": "processing"
     }
+    logger.info("[ZIP] Started Job ID: %s", job_id)
 
     # D   n preview c  
     for old in PREVIEW_FOLDER.iterdir():
