@@ -135,28 +135,51 @@ except ImportError as _e:
 # 3.  CONFIGURATION
 #                                                                                                                                                                                                          
 #                                                                                                                                                                                                          
-# 3.  GLOBAL  STATE
+# 3.  GLOBAL  STATE (Thread-Safe Singleton)
 #                                                                                                                                                                                                          
-app = Flask(__name__)
+class JobManager:
+    _instance = None
+    _lock = threading.Lock()
 
-# Progress tracking for ZIP/Batch uploads
-JOB_STATUS = {}
-status_lock = threading.Lock()
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(JobManager, cls).__new__(cls)
+                cls._instance.jobs = {}
+                cls._instance.lock = threading.Lock()
+        return cls._instance
+
+    def set_job(self, job_id, data):
+        with self.lock:
+            self.jobs[job_id] = data
+
+    def update_job(self, job_id, key, value):
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs[job_id][key] = value
+
+    def get_job(self, job_id):
+        with self.lock:
+            return self.jobs.get(job_id)
+
+    def list_keys(self):
+        with self.lock:
+            return list(self.jobs.keys())
+
+job_manager = JobManager()
+app = Flask(__name__)
 
 @app.route("/api/v1/jobs/status/<job_id>", methods=["GET"])
 def get_job_status(job_id):
-    with status_lock:
-        status = JOB_STATUS.get(job_id)
-    
+    status = job_manager.get_job(job_id)
     if not status:
-        # Fallback debug log
-        logger.debug("Job %s not found in status store (Current keys: %s)", job_id, list(JOB_STATUS.keys()))
-        return jsonify({"error": "Job not found"}), 404
+        # Senior Debug: Why 404?
+        all_keys = job_manager.list_keys()
+        logger.debug("Job %s 404. Available jobs: %s", job_id, all_keys)
+        return jsonify({"error": "Job not found", "available": len(all_keys)}), 404
     
-    # Calculate elapsed time
     elapsed = time.time() - status.get("start_time", time.time())
     status["elapsed_seconds"] = int(elapsed)
-    
     return jsonify(status)
 
 class Config:
@@ -3221,14 +3244,13 @@ def upload_zip():
         return jsonify({"error": "Tên file rỗng."}), 400
 
     # Initialize status
-    with status_lock:
-        JOB_STATUS[job_id] = {
-            "total": 0,
-            "processed": 0,
-            "current_file": "Initializing...",
-            "start_time": time.time(),
-            "status": "processing"
-        }
+    job_manager.set_job(job_id, {
+        "total": 0,
+        "processed": 0,
+        "current_file": "Initializing...",
+        "start_time": time.time(),
+        "status": "processing"
+    })
     logger.info("[ZIP] Started Job ID: %s", job_id)
 
     # D   n preview c  
@@ -3250,11 +3272,10 @@ def upload_zip():
             ][:20]
 
             if not image_entries:
-                JOB_STATUS[job_id]["status"] = "failed"
+                job_manager.update_job(job_id, "status", "failed")
                 return jsonify({"error": "Kh ng t m th   y    nh (.png/.jpg/.jpeg) trong ZIP."}), 400
 
-            with status_lock:
-                JOB_STATUS[job_id]["total"] = len(image_entries)
+            job_manager.update_job(job_id, "total", len(image_entries))
             logger.info("[ZIP] %d    nh t   : %s", len(image_entries), zip_file.filename)
 
             for entry in image_entries:
@@ -3262,8 +3283,7 @@ def upload_zip():
                 if not clean_name:
                     continue
                 
-                with status_lock:
-                    JOB_STATUS[job_id]["current_file"] = clean_name
+                job_manager.update_job(job_id, "current_file", clean_name)
                 
                 try:
                     img_bytes = zf.read(entry)
@@ -3281,8 +3301,9 @@ def upload_zip():
                     results.append(flat)
                     
                     # Update progress
-                    with status_lock:
-                        JOB_STATUS[job_id]["processed"] += 1
+                    current_status = job_manager.get_job(job_id)
+                    if current_status:
+                        job_manager.update_job(job_id, "processed", current_status["processed"] + 1)
                     
                     logger.info("[ZIP]   ... %s -> total=%.0f  status=%s",
                                 clean_name, flat["total_amount"], flat["status"])
@@ -3294,14 +3315,14 @@ def upload_zip():
                     logger.error("[ZIP]     %s: %s", clean_name, exc, exc_info=True)
 
     except zipfile.BadZipFile:
-        JOB_STATUS[job_id]["status"] = "failed"
+        job_manager.update_job(job_id, "status", "failed")
         return jsonify({"error": "File kh ng ph   i      nh d   ng ZIP h   p l   ."}), 400
     except Exception as exc:
-        JOB_STATUS[job_id]["status"] = "failed"
+        job_manager.update_job(job_id, "status", "failed")
         logger.error("[ZIP] System error: %s", exc, exc_info=True)
         return jsonify({"error": f"L  --i h    th   ng: {exc}"}), 500
 
-    JOB_STATUS[job_id]["status"] = "completed"
+    job_manager.update_job(job_id, "status", "completed")
     
     if not results:
         return jsonify({"error": "Kh ng tr ch xu   t        c k   t qu    n o.", "details": errors}), 400
