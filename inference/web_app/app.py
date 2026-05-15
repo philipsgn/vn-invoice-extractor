@@ -137,6 +137,8 @@ except ImportError as _e:
 #                                                                                                                                                                                                          
 # 3.  GLOBAL  STATE
 #                                                                                                                                                                                                          
+app = Flask(__name__)
+
 # Progress tracking for ZIP/Batch uploads
 JOB_STATUS = {}  # { job_id: { "total": 10, "processed": 3, "current_file": "...", "start_time": ... } }
 
