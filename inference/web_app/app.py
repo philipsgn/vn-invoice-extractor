@@ -2857,9 +2857,6 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/v1/extract", methods=["POST"])
-@rate_limited
-@requires_model
 def _save_extraction_json(filename: str, result: dict):
     """
     Save the full extraction result to extracted_json/ folder.
@@ -2867,20 +2864,52 @@ def _save_extraction_json(filename: str, result: dict):
     try:
         json_dir = Path("extracted_json")
         json_dir.mkdir(exist_ok=True)
-        # Use filename as base, remove extension, add .json
         base_name = Path(filename).stem
         save_path = json_dir / f"{base_name}.json"
-        
-        # Add metadata
         result["_saved_at"] = datetime.now().isoformat()
         result["_filename"] = filename
-        
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
         return str(save_path)
     except Exception as e:
-        print(f"Error saving JSON for {filename}: {e}")
+        logger.error("Failed to save extraction JSON: %s", e)
         return None
+
+@app.route("/api/v1/extract", methods=["POST"])
+@rate_limited
+@requires_model
+def api_extract():
+    """
+    Main API endpoint for single-invoice extraction.
+    """
+    uid = getattr(g, "request_id", str(uuid.uuid4()))
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No file part", "request_id": uid}), 400
+    
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"success": False, "error": "No selected file", "request_id": uid}), 400
+
+    try:
+        img_bytes = file.read()
+        result = run_full_pipeline(
+            image_bytes = img_bytes,
+            filename    = file.filename,
+            log         = logger,
+            met         = metrics,
+        )
+        
+        # PERSISTENCE: Save result to JSON folder
+        _save_extraction_json(file.filename, result)
+        
+        return jsonify({
+            "success":    True,
+            "data":       result,
+            "request_id": uid
+        })
+    except Exception as e:
+        logger.error("Extraction failed: %s", e, exc_info=True)
+        return jsonify({"success": False, "error": str(e), "request_id": uid}), 500
 
 @app.route("/api/v1/update-result", methods=["POST"])
 def update_result():
