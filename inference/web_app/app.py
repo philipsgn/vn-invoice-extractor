@@ -140,12 +140,17 @@ except ImportError as _e:
 app = Flask(__name__)
 
 # Progress tracking for ZIP/Batch uploads
-JOB_STATUS = {}  # { job_id: { "total": 10, "processed": 3, "current_file": "...", "start_time": ... } }
+JOB_STATUS = {}
+status_lock = threading.Lock()
 
 @app.route("/api/v1/jobs/status/<job_id>", methods=["GET"])
 def get_job_status(job_id):
-    status = JOB_STATUS.get(job_id)
+    with status_lock:
+        status = JOB_STATUS.get(job_id)
+    
     if not status:
+        # Fallback debug log
+        logger.debug("Job %s not found in status store (Current keys: %s)", job_id, list(JOB_STATUS.keys()))
         return jsonify({"error": "Job not found"}), 404
     
     # Calculate elapsed time
@@ -3187,13 +3192,14 @@ def upload_zip():
         return jsonify({"error": "Tên file rỗng."}), 400
 
     # Initialize status
-    JOB_STATUS[job_id] = {
-        "total": 0,
-        "processed": 0,
-        "current_file": "Initializing...",
-        "start_time": time.time(),
-        "status": "processing"
-    }
+    with status_lock:
+        JOB_STATUS[job_id] = {
+            "total": 0,
+            "processed": 0,
+            "current_file": "Initializing...",
+            "start_time": time.time(),
+            "status": "processing"
+        }
     logger.info("[ZIP] Started Job ID: %s", job_id)
 
     # D   n preview c  
@@ -3218,7 +3224,8 @@ def upload_zip():
                 JOB_STATUS[job_id]["status"] = "failed"
                 return jsonify({"error": "Kh ng t m th   y    nh (.png/.jpg/.jpeg) trong ZIP."}), 400
 
-            JOB_STATUS[job_id]["total"] = len(image_entries)
+            with status_lock:
+                JOB_STATUS[job_id]["total"] = len(image_entries)
             logger.info("[ZIP] %d    nh t   : %s", len(image_entries), zip_file.filename)
 
             for entry in image_entries:
@@ -3226,7 +3233,8 @@ def upload_zip():
                 if not clean_name:
                     continue
                 
-                JOB_STATUS[job_id]["current_file"] = clean_name
+                with status_lock:
+                    JOB_STATUS[job_id]["current_file"] = clean_name
                 
                 try:
                     img_bytes = zf.read(entry)
@@ -3244,7 +3252,8 @@ def upload_zip():
                     results.append(flat)
                     
                     # Update progress
-                    JOB_STATUS[job_id]["processed"] += 1
+                    with status_lock:
+                        JOB_STATUS[job_id]["processed"] += 1
                     
                     logger.info("[ZIP]   ... %s -> total=%.0f  status=%s",
                                 clean_name, flat["total_amount"], flat["status"])

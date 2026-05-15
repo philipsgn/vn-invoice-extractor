@@ -288,10 +288,12 @@
         timerText.textContent = `${m}:${s}`;
       }, 1000);
       
+      let notFoundCount = 0;
       const pollInterval = setInterval(async () => {
         try {
           const res = await fetch(`/api/v1/jobs/status/${jobId}`);
           if (res.ok) {
+            notFoundCount = 0;
             const status = await res.json();
             const pct = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
             
@@ -303,8 +305,11 @@
             if (status.status === 'completed') {
               clearInterval(pollInterval);
               clearInterval(timerInterval);
-              // Submit the actual form to get the final redirect
-              // Note: we'll submit the original form but we need to pass the job_id
+            }
+          } else if (res.status === 404) {
+            notFoundCount++;
+            if (notFoundCount > 5) { // Only fail after 5 consecutive 404s
+               console.warn("Job not yet found on server, retrying...");
             }
           }
         } catch (err) { console.error('Poll error:', err); }
