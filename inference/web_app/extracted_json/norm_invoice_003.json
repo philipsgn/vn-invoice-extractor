@@ -1,0 +1,380 @@
+{
+  "status": "success",
+  "document_confidence": 0.9823,
+  "seller": {
+    "name": {
+      "value": "CÔNG TY CỔ PHÂN THIẾT BỊ VÀ GIẢI PHÁP ĐIỆN TỬ MIÊN NĂM",
+      "confidence": 0.9999
+    },
+    "tax_code": {
+      "value": "2296048952",
+      "confidence": 0.9995
+    },
+    "address": {
+      "value": "143 Lý Chính Thắng, Phường 7, Quận 3, TP. Hồ Chí Minh",
+      "confidence": 0.9998
+    },
+    "phone": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "bank_account": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "bank_name": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "tax_authority_code": {
+      "value": "T92N/8392588",
+      "confidence": 0.8466
+    }
+  },
+  "buyer": {
+    "name": {
+      "value": "CÔNG TY TNHH XÂY DƯNG CÔNG TRÌNH VÀ QUẢN LÝ DƯ ÁN ĐÔNG DƯƠNG",
+      "confidence": 0.0
+    },
+    "tax_code": {
+      "value": "8137551609",
+      "confidence": 0.9996
+    },
+    "address": {
+      "value": "11 Nguyễn Văn Nguyễn, Phường Tân Định, Quận 1, TP.Hồ Chí Minh",
+      "confidence": 0.9999
+    },
+    "full_name": {
+      "value": "nguyễn Văn Lực",
+      "confidence": 0.0
+    }
+  },
+  "items": [
+    {
+      "name": {
+        "value": "Mã số thuế 2296048952",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "2.276.545",
+        "confidence": 0.6
+      },
+      "quantity": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "unit_price": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Địa chi Số 143 Lý thoại",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "2.276.545",
+        "confidence": 0.6
+      },
+      "quantity": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "unit_price": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Biến áp 1 pha SKVA Lioa",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "2.276.545",
+        "confidence": 0.9755
+      },
+      "quantity": {
+        "value": 18.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 2276545.0,
+        "confidence": 0.7887
+      },
+      "total": {
+        "value": 40977810.0,
+        "confidence": 0.9859
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Đèn LED downlight âm trần 9W",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "103.737",
+        "confidence": 0.9415
+      },
+      "quantity": {
+        "value": 7.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 103737.0,
+        "confidence": 0.7937
+      },
+      "total": {
+        "value": 726159.0,
+        "confidence": 0.9921
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Chuột có dây Dell MS116",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "91.647",
+        "confidence": 0.9631
+      },
+      "quantity": {
+        "value": 5.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 91647.0,
+        "confidence": 0.7874
+      },
+      "total": {
+        "value": 458235.0,
+        "confidence": 0.9843
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Máy cưa gỗ lưỡi 185mm Makita",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "1.591.010",
+        "confidence": 0.9248
+      },
+      "quantity": {
+        "value": 13.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 1591010.0,
+        "confidence": 0.7554
+      },
+      "total": {
+        "value": 20683130.0,
+        "confidence": 0.9442
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Chocolate KitKat 4 thanh",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "18.833",
+        "confidence": 0.9615
+      },
+      "quantity": {
+        "value": 11.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 18833.0,
+        "confidence": 0.79
+      },
+      "total": {
+        "value": 207163.0,
+        "confidence": 0.9875
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Nước ngọt Coca-Cola 330ml",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "9.320",
+        "confidence": 0.9622
+      },
+      "quantity": {
+        "value": 18.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 9320.0,
+        "confidence": 0.79
+      },
+      "total": {
+        "value": 167760.0,
+        "confidence": 0.9875
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    }
+  ],
+  "invoice": {
+    "type": {
+      "value": "HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
+      "confidence": 0.9996
+    },
+    "symbol": {
+      "value": "1X73SG",
+      "confidence": 0.9995
+    },
+    "number": {
+      "value": "7545523",
+      "confidence": 0.9993
+    },
+    "date": {
+      "value": "{'value': 'Ngày 08 tháng 09 năm 2021', 'confidence': 0.9857}",
+      "confidence": 0.9857
+    },
+    "payment_method": {
+      "value": "Chuyển khoản",
+      "confidence": 0.9645
+    },
+    "currency": {
+      "value": "VND",
+      "confidence": 0.0
+    },
+    "vat_rate": "0",
+    "subtotal": {
+      "value": 77143390.0,
+      "confidence": 0.958
+    },
+    "vat_amount": {
+      "value": 7714339.0,
+      "confidence": 1.0
+    },
+    "total_amount": {
+      "value": 84857729.0,
+      "confidence": 1.0
+    },
+    "vat_breakdown": []
+  },
+  "_validation": {
+    "errors": [],
+    "warnings": []
+  },
+  "_saved_at": "2026-05-15T12:55:22.247990",
+  "_filename": "norm_invoice_003.png"
+}

@@ -134,6 +134,24 @@ except ImportError as _e:
 #                                                                                                                                                                                                          
 # 3.  CONFIGURATION
 #                                                                                                                                                                                                          
+#                                                                                                                                                                                                          
+# 3.  GLOBAL  STATE
+#                                                                                                                                                                                                          
+# Progress tracking for ZIP/Batch uploads
+JOB_STATUS = {}  # { job_id: { "total": 10, "processed": 3, "current_file": "...", "start_time": ... } }
+
+@app.route("/api/v1/jobs/status/<job_id>", methods=["GET"])
+def get_job_status(job_id):
+    status = JOB_STATUS.get(job_id)
+    if not status:
+        return jsonify({"error": "Job not found"}), 404
+    
+    # Calculate elapsed time
+    elapsed = time.time() - status.get("start_time", time.time())
+    status["elapsed_seconds"] = int(elapsed)
+    
+    return jsonify(status)
+
 class Config:
     """
     Central configuration.
@@ -3161,9 +3179,19 @@ def upload_zip():
     if "file" not in request.files:
         return jsonify({"error": "Thi   u file ZIP."}), 400
 
+    job_id   = request.form.get("job_id", str(uuid.uuid4()))
     zip_file = request.files["file"]
     if not zip_file or not zip_file.filename:
         return jsonify({"error": "T n file r  --ng."}), 400
+
+    # Initialize status
+    JOB_STATUS[job_id] = {
+        "total": 0,
+        "processed": 0,
+        "current_file": "Initializing...",
+        "start_time": time.time(),
+        "status": "processing"
+    }
 
     # D   n preview c  
     for old in PREVIEW_FOLDER.iterdir():
@@ -3184,14 +3212,19 @@ def upload_zip():
             ][:20]
 
             if not image_entries:
+                JOB_STATUS[job_id]["status"] = "failed"
                 return jsonify({"error": "Kh ng t m th   y    nh (.png/.jpg/.jpeg) trong ZIP."}), 400
 
+            JOB_STATUS[job_id]["total"] = len(image_entries)
             logger.info("[ZIP] %d    nh t   : %s", len(image_entries), zip_file.filename)
 
             for entry in image_entries:
                 clean_name = Path(entry).name
                 if not clean_name:
                     continue
+                
+                JOB_STATUS[job_id]["current_file"] = clean_name
+                
                 try:
                     img_bytes = zf.read(entry)
                     # L  u    nh preview
@@ -3206,6 +3239,10 @@ def upload_zip():
                     _save_extraction_json(clean_name, pipeline_result)
                     flat = _flatten_result(pipeline_result, clean_name)
                     results.append(flat)
+                    
+                    # Update progress
+                    JOB_STATUS[job_id]["processed"] += 1
+                    
                     logger.info("[ZIP]   ... %s -> total=%.0f  status=%s",
                                 clean_name, flat["total_amount"], flat["status"])
                 except ValidationError as ve:
@@ -3216,11 +3253,15 @@ def upload_zip():
                     logger.error("[ZIP]     %s: %s", clean_name, exc, exc_info=True)
 
     except zipfile.BadZipFile:
+        JOB_STATUS[job_id]["status"] = "failed"
         return jsonify({"error": "File kh ng ph   i      nh d   ng ZIP h   p l   ."}), 400
     except Exception as exc:
+        JOB_STATUS[job_id]["status"] = "failed"
         logger.error("[ZIP] System error: %s", exc, exc_info=True)
         return jsonify({"error": f"L  --i h    th   ng: {exc}"}), 500
 
+    JOB_STATUS[job_id]["status"] = "completed"
+    
     if not results:
         return jsonify({"error": "Kh ng tr ch xu   t        c k   t qu    n o.", "details": errors}), 400
 

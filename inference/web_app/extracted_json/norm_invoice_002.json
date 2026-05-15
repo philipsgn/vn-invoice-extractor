@@ -1,0 +1,417 @@
+{
+  "status": "success",
+  "document_confidence": 0.8339,
+  "seller": {
+    "name": {
+      "value": "CÔNG TY TNHH DỊCH VU LOGISTICS VÀ KHAI THÁC CẢNG VINA",
+      "confidence": 0.9999
+    },
+    "tax_code": {
+      "value": "036701000739943",
+      "confidence": 0.9993
+    },
+    "address": {
+      "value": "Số 8 Trần Phú, Phường Ngô Quyền, Quận Ngô Quyền, TP. Hải Phòng",
+      "confidence": 0.9998
+    },
+    "phone": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "bank_account": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "bank_name": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "tax_authority_code": {
+      "value": "T26N/5584332",
+      "confidence": 0.8928
+    }
+  },
+  "buyer": {
+    "name": {
+      "value": "CÔNG TY TNHII SẢN XUẤT VÀ PHÂN PHỎI NÔNG SẢN HÙNG CƯỜNG",
+      "confidence": 0.0
+    },
+    "tax_code": {
+      "value": "8983413583284",
+      "confidence": 0.9996
+    },
+    "address": {
+      "value": "Xã Mỹ Hạnh Nam, Huyện Đức Hoà, Tỉnh Long An",
+      "confidence": 0.9999
+    },
+    "full_name": {
+      "value": "",
+      "confidence": 0.0
+    }
+  },
+  "items": [
+    {
+      "name": {
+        "value": "Sơn nội thất Dulux 5L",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "Ngày",
+        "confidence": 0.6
+      },
+      "quantity": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "unit_price": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Tôm thẻ tươi lkg (50/60 con)",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "163.280",
+        "confidence": 0.9645
+      },
+      "quantity": {
+        "value": 9.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 163280.0,
+        "confidence": 0.7951
+      },
+      "total": {
+        "value": 1469520.0,
+        "confidence": 0.9939
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Dây cáp điện 3x2.5 Cadivi",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "27.484",
+        "confidence": 0.9645
+      },
+      "quantity": {
+        "value": 16.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 27484.0,
+        "confidence": 0.7925
+      },
+      "total": {
+        "value": 439744.0,
+        "confidence": 0.9906
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Kim bấm số 10 (1000 cái)",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "9.258",
+        "confidence": 0.9642
+      },
+      "quantity": {
+        "value": 5.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 9258.0,
+        "confidence": 0.7903
+      },
+      "total": {
+        "value": 46290.0,
+        "confidence": 0.9879
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Mực in HP85A (hộp)",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "553.153",
+        "confidence": 0.9716
+      },
+      "quantity": {
+        "value": 10.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 553153.0,
+        "confidence": 0.7913
+      },
+      "total": {
+        "value": 5531530.0,
+        "confidence": 0.9891
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Cân điện tử bàn 30kg Jadever",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "1.829.096",
+        "confidence": 0.9666
+      },
+      "quantity": {
+        "value": 3.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 1829096.0,
+        "confidence": 0.7722
+      },
+      "total": {
+        "value": 5487288.0,
+        "confidence": 0.9652
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Máy tính bỏ túi Casio MH-12",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "154.470",
+        "confidence": 0.9652
+      },
+      "quantity": {
+        "value": 14.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 154470.0,
+        "confidence": 0.7908
+      },
+      "total": {
+        "value": 2162580.0,
+        "confidence": 0.9885
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Máy đo huyết áp điện tử Omron",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "1.510.571",
+        "confidence": 0.9354
+      },
+      "quantity": {
+        "value": 1.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 28700849.0,
+        "confidence": 0.7886
+      },
+      "total": {
+        "value": 28700849.0,
+        "confidence": 0.9857
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    },
+    {
+      "name": {
+        "value": "Máy mài góc Bosch GWS 750",
+        "confidence": 1.0
+      },
+      "unit": {
+        "value": "1.649.865",
+        "confidence": 0.9626
+      },
+      "quantity": {
+        "value": 12.0,
+        "confidence": 1.0
+      },
+      "unit_price": {
+        "value": 137488.0,
+        "confidence": 0.7569
+      },
+      "total": {
+        "value": 1649865.0,
+        "confidence": 0.9461
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    }
+  ],
+  "invoice": {
+    "type": {
+      "value": "HÓA ĐƠN BÁN HÀNG",
+      "confidence": 0.9991
+    },
+    "symbol": {
+      "value": "1K17KC",
+      "confidence": 0.9995
+    },
+    "number": {
+      "value": "316454",
+      "confidence": 0.9995
+    },
+    "date": {
+      "value": "{'value': 'Ngày 20 tháng 09 năm 2022', 'confidence': 0.9939}",
+      "confidence": 0.9939
+    },
+    "payment_method": {
+      "value": "Chuyển khoản",
+      "confidence": 0.9993
+    },
+    "currency": {
+      "value": "VND",
+      "confidence": 0.0
+    },
+    "vat_rate": "0",
+    "subtotal": {
+      "value": 50819028.0,
+      "confidence": 0.9722
+    },
+    "vat_amount": {
+      "value": 0.0,
+      "confidence": 0.9198
+    },
+    "total_amount": {
+      "value": 50819028.0,
+      "confidence": 0.9999
+    },
+    "vat_breakdown": []
+  },
+  "_validation": {
+    "errors": [
+      "seller.tax_code '036701000739943' invalid (must be 10 digits, 13 digits, or 10-3 format)"
+    ],
+    "warnings": []
+  },
+  "_saved_at": "2026-05-15T12:53:29.109810",
+  "_filename": "norm_invoice_002.png"
+}

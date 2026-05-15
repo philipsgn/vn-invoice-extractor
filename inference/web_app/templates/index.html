@@ -203,6 +203,27 @@
   </div>
 </footer>
 
+<!-- ══ PROGRESS OVERLAY ══ -->
+<div class="progress-overlay" id="zip-progress-overlay">
+  <div class="progress-card">
+    <h2>⚡ Đang trích xuất Batch</h2>
+    <p>Hệ thống AI đang xử lý file ZIP của bạn. Vui lòng không đóng trình duyệt.</p>
+    
+    <div class="progress-track">
+      <div class="progress-fill" id="zip-progress-fill"></div>
+    </div>
+    
+    <div class="progress-stats">
+      <span id="zip-progress-count">Đang chuẩn bị...</span>
+      <span id="zip-progress-pct">0%</span>
+    </div>
+    
+    <div class="progress-current-file" id="zip-current-file">Đang giải nén file...</div>
+    
+    <div class="progress-timer" id="zip-timer">00:00</div>
+  </div>
+</div>
+
 <script>
   // ── Tab switching ──
   function switchTab(name, btn) {
@@ -243,16 +264,73 @@
     info.innerHTML = `📦 <strong>${f.name}</strong> &nbsp;<span style="color:var(--muted)">${(f.size/1024/1024).toFixed(2)} MB</span>`;
   }
 
-  // ── Loading feedback ──
-  ['form-multi', 'form-zip'].forEach(id => {
-    const form = document.getElementById(id);
-    if (!form) return;
-    form.addEventListener('submit', function() {
-      const btn = form.querySelector('button[type=submit]');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner" style="display:inline-block;border-color:rgba(255,255,255,.3);border-top-color:#fff;"></span>&nbsp;Đang xử lý...';
+  // ── Advanced ZIP Progress Tracking ──
+  const zipForm = document.getElementById('form-zip');
+  if (zipForm) {
+    zipForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const jobId = 'job_' + Math.random().toString(36).substr(2, 9);
+      const overlay = document.getElementById('zip-progress-overlay');
+      const fill = document.getElementById('zip-progress-fill');
+      const countText = document.getElementById('zip-progress-count');
+      const pctText = document.getElementById('zip-progress-pct');
+      const fileText = document.getElementById('zip-current-file');
+      const timerText = document.getElementById('zip-timer');
+      
+      overlay.style.display = 'flex';
+      
+      let seconds = 0;
+      const timerInterval = setInterval(() => {
+        seconds++;
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        timerText.textContent = `${m}:${s}`;
+      }, 1000);
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/v1/jobs/status/${jobId}`);
+          if (res.ok) {
+            const status = await res.json();
+            const pct = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+            
+            fill.style.width = pct + '%';
+            pctText.textContent = pct + '%';
+            countText.textContent = `Đã xử lý ${status.processed}/${status.total} hóa đơn`;
+            fileText.textContent = `Đang trích xuất: ${status.current_file}`;
+            
+            if (status.status === 'completed') {
+              clearInterval(pollInterval);
+              clearInterval(timerInterval);
+              // Submit the actual form to get the final redirect
+              // Note: we'll submit the original form but we need to pass the job_id
+            }
+          }
+        } catch (err) { console.error('Poll error:', err); }
+      }, 800);
+      
+      const formData = new FormData(zipForm);
+      formData.append('job_id', jobId);
+      
+      try {
+        const resp = await fetch(zipForm.action, { method: 'POST', body: formData });
+        if (resp.ok) {
+           const html = await resp.text();
+           document.open();
+           document.write(html);
+           document.close();
+           clearInterval(pollInterval);
+           clearInterval(timerInterval);
+        }
+      } catch (err) {
+        alert('Lỗi khi upload ZIP: ' + err);
+        overlay.style.display = 'none';
+        clearInterval(pollInterval);
+        clearInterval(timerInterval);
+      }
     });
-  });
+  }
 
   // ════════════════════════════════════════════════════════════════
   // CORE EXTRACTION LOGIC (Single File)
@@ -266,38 +344,9 @@
   const SLOW_THRESHOLD_MS = 8000;
 
   const FIELD_MAP = {
-    seller: {
-      label: '🏢 Người bán',
-      fields: {
-        name: 'Tên công ty',
-        tax_code: 'Mã số thuế',
-        tax_authority_code: 'CQT quản lý',
-        address: 'Địa chỉ',
-      },
-    },
-    buyer: {
-      label: '🏬 Người mua',
-      fields: {
-        name: 'Tên công ty / cá nhân',
-        tax_code: 'Mã số thuế',
-        address: 'Địa chỉ',
-      },
-    },
-    invoice: {
-      label: '📄 Thông tin hoá đơn',
-      fields: {
-        type: 'Loại hoá đơn',
-        symbol: 'Ký hiệu',
-        number: 'Số hoá đơn',
-        date: 'Ngày phát hành',
-        payment_method: 'Hình thức thanh toán',
-        subtotal: 'Cộng tiền hàng',
-        vat_rate: 'Thuế suất VAT',
-        vat_amount: 'Tiền thuế VAT',
-        total_amount: 'Tổng tiền thanh toán',
-        currency: 'Đơn vị tiền tệ',
-      },
-    },
+    seller: { label: '🏢 Người bán', fields: { name: 'Tên công ty', tax_code: 'Mã số thuế', address: 'Địa chỉ' } },
+    buyer:  { label: '🏬 Người mua', fields: { name: 'Tên công ty / cá nhân', tax_code: 'Mã số thuế', address: 'Địa chỉ' } },
+    invoice:{ label: '📄 Thông tin hoá đơn', fields: { type: 'Loại hoá đơn', number: 'Số hoá đơn', date: 'Ngày phát hành', total_amount: 'Tổng tiền thanh toán' } },
   };
 
   const dropZone = document.getElementById('drop-zone');
@@ -336,102 +385,44 @@
 
   function handleFile(file) {
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['png', 'jpg', 'jpeg', 'pdf'].includes(ext)) {
-      showStatus('error', '❌ Định dạng .' + ext + ' không hỗ trợ. Dùng PNG, JPG, PDF.');
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      showStatus('error', '❌ File quá lớn. Tối đa 50MB.');
-      return;
-    }
+    if (!['png', 'jpg', 'jpeg', 'pdf'].includes(ext)) { showStatus('error', '❌ Định dạng không hỗ trợ.'); return; }
     selectedFile = file;
-    if (ext !== 'pdf') {
-      previewImg.src = URL.createObjectURL(file);
-      previewImg.style.display = 'block';
-    } else {
-      previewImg.style.display = 'none';
-    }
-    previewName.textContent = '📎 ' + file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
+    if (ext !== 'pdf') { previewImg.src = URL.createObjectURL(file); previewImg.style.display = 'block'; }
+    previewName.textContent = '📎 ' + file.name;
     previewWrap.style.display = 'block';
     btnExtract.disabled = false;
-    clearResult();
-    hideStatus();
-    hideReqMeta();
   }
 
   btnExtract.addEventListener('click', () => { if (selectedFile) doExtract(); });
 
   function doExtract() {
     setLoading(true);
-    showStatus('info', '⏳ Đang xử lý pipeline AI...');
+    showStatus('info', '⏳ Đang xử lý AI...');
     startProgress();
-    clearResult();
-    hideReqMeta();
 
     const formData = new FormData();
     formData.append('file', selectedFile);
 
     fetch(API.EXTRACT, { method: 'POST', body: formData })
-      .then(resp => {
-        if (resp.status === 429) throw { type: 'rate_limit' };
-        if (resp.status === 503) throw { type: 'not_ready' };
-        return resp.json();
-      })
+      .then(resp => resp.json())
       .then(json => {
         if (json.success && json.data) {
-          showStatus('success', '✅ Thành công: ' + selectedFile.name);
-          showReqMeta(json.request_id, json.latency_ms, json.data._meta);
+          showStatus('success', '✅ Thành công');
           renderResult(json.data);
           lastResult = json.data;
           copyBtn.style.display = 'inline-block';
-        } else if (json.error) {
-          showStatus('error', '❌ ' + (json.stage ? '[Stage ' + json.stage + '] ' : '') + json.error);
-          renderError(json.error, json.stage, json.traceback, json.request_id);
+        } else {
+          showStatus('error', '❌ ' + (json.error || 'Lỗi không xác định'));
         }
       })
-      .catch(err => {
-        if (err.type === 'rate_limit') showStatus('warning', '⚠️ Quá nhiều request. Hãy đợi.');
-        else if (err.type === 'not_ready') showStatus('warning', '⏳ Model đang khởi động...');
-        else showStatus('error', '❌ Lỗi kết nối.');
-      })
+      .catch(err => showStatus('error', '❌ Lỗi kết nối.'))
       .finally(() => { setLoading(false); stopProgress(); });
-  }
-
-  function getVal(field, fallback = "—") {
-    if (!field) return fallback;
-    let v = (typeof field === "object" && field !== null) ? field.value : field;
-    if (v === undefined || v === null || v === "") return fallback;
-    return v;
-  }
-
-  function getConf(field) {
-    if (!field || typeof field.confidence !== "number") return 0.0;
-    return field.confidence;
-  }
-
-  function fmtMoney(val) {
-    if (val === null || val === undefined || val === "" || val === "—") return "—";
-    const n = Number(String(val).replace(/\D/g, ""));
-    return isNaN(n) ? "—" : n.toLocaleString("vi-VN");
-  }
-
-  function confBadge(conf) {
-    if (!conf) return '';
-    const pct = (conf * 100).toFixed(0);
-    const cls = conf >= 0.95 ? 'green' : (conf >= 0.80 ? 'yellow' : 'red');
-    return `<span class="conf-badge ${cls}"><span class="dot">●</span>${pct}%</span>`;
   }
 
   function renderResult(data) {
     placeholder.style.display = 'none';
     fieldsWrap.style.display = 'block';
     fieldsWrap.innerHTML = '';
-
-    const headerDiv = document.createElement('div');
-    headerDiv.style.padding = '12px 20px';
-    headerDiv.innerHTML = `<span style="font-size:12px;color:var(--text2)">Độ tin cậy tài liệu: <strong>${(data.document_confidence * 100).toFixed(1)}%</strong></span>`;
-    fieldsWrap.appendChild(headerDiv);
-
     for (const groupKey in FIELD_MAP) {
       const groupData = data[groupKey];
       if (!groupData) continue;
@@ -439,74 +430,17 @@
       sec.className = 'section-label';
       sec.textContent = FIELD_MAP[groupKey].label;
       fieldsWrap.appendChild(sec);
-
       for (const fKey in FIELD_MAP[groupKey].fields) {
-        appendFieldRow(fieldsWrap, FIELD_MAP[groupKey].fields[fKey], groupData[fKey]);
-      }
-    }
-
-    if (data.items && data.items.length > 0) {
-      const isec = document.createElement('div');
-      isec.className = 'section-label';
-      isec.textContent = `📦 CHI TIẾT MẶT HÀNG (${data.items.length})`;
-      fieldsWrap.appendChild(isec);
-      // Simplify items display for this view
-      data.items.forEach((it, idx) => {
+        const val = (groupData[fKey] && groupData[fKey].value) || '—';
         const row = document.createElement('div');
         row.className = 'field-row';
-        row.innerHTML = `<div class="field-key">${idx+1}. ${getVal(it.name)}</div><div class="field-val">${fmtMoney(getVal(it.total))}</div>`;
+        row.innerHTML = `<div class="field-key">${FIELD_MAP[groupKey].fields[fKey]}</div><div class="field-val">${val}</div>`;
         fieldsWrap.appendChild(row);
-      });
+      }
     }
-
-    renderMetaBlock(data._meta);
     rawJson.textContent = JSON.stringify(data, null, 2);
     rawToggle.style.display = 'inline-block';
   }
-
-  function appendFieldRow(parent, label, fieldObj) {
-    const val = getVal(fieldObj);
-    const conf = getConf(fieldObj);
-    const row = document.createElement('div');
-    row.className = 'field-row';
-    row.innerHTML = `<div class="field-key">${label}</div><div class="field-val">${typeof val==='number' ? val.toLocaleString('vi-VN') : val}${confBadge(conf)}</div>`;
-    parent.appendChild(row);
-  }
-
-  function renderMetaBlock(meta) {
-    if(!meta) return;
-    const el = document.createElement('div');
-    el.className = 'meta-section';
-    el.innerHTML = `<span>Device: ${meta.device||'—'}</span><span>Time: ${meta.pipeline_ms||'—'}ms</span>`;
-    fieldsWrap.appendChild(el);
-  }
-
-  function renderError(msg, stage, tb, reqId) {
-    placeholder.style.display = 'none';
-    fieldsWrap.style.display = 'block';
-    fieldsWrap.innerHTML = `<div class="error-block">${stage?`<div class="stage-tag">Stage ${stage}</div>`:''}<div>❌ ${msg}</div></div>`;
-  }
-
-  function showReqMeta(id, lat, meta) {
-    reqMeta.style.display = 'flex';
-    metaLatency.textContent = lat ? lat.toFixed(0) + 'ms' : '—';
-    metaLatency.className = 'value ' + (lat > SLOW_THRESHOLD_MS ? 'slow' : 'fast');
-    metaReqId.textContent = id || '—';
-    metaDevice.textContent = meta?.device || '—';
-  }
-
-  function hideReqMeta() { reqMeta.style.display = 'none'; }
-  rawToggle.addEventListener('click', () => {
-    const vis = rawJson.style.display === 'block';
-    rawJson.style.display = vis ? 'none' : 'block';
-    rawToggle.textContent = vis ? '{ } Raw JSON' : '✕ Đóng JSON';
-  });
-
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(JSON.stringify(lastResult, null, 2));
-    copyBtn.textContent = '✅ Copied!';
-    setTimeout(() => copyBtn.textContent = 'Copy JSON', 2000);
-  });
 
   function setLoading(on) {
     btnExtract.disabled = on;
@@ -514,32 +448,9 @@
     btnText.textContent = on ? 'Đang xử lý...' : '⚡ Trích xuất thông tin';
   }
 
-  function clearResult() {
-    placeholder.style.display = 'flex';
-    fieldsWrap.style.display = 'none';
-    fieldsWrap.innerHTML = '';
-    rawToggle.style.display = 'none';
-    rawJson.style.display = 'none';
-    copyBtn.style.display = 'none';
-  }
-
   function showStatus(type, msg) { statusBar.className = type; statusBar.textContent = msg; statusBar.style.display = 'flex'; }
-  function hideStatus() { statusBar.style.display = 'none'; }
-
-  function startProgress() {
-    progressBar.classList.add('active');
-    progressBar.style.transform = 'scaleX(0.1)';
-    progressBar._iv = setInterval(() => {
-      const cur = parseFloat(progressBar.style.transform.match(/scaleX\((.+)\)/)[1]);
-      progressBar.style.transform = `scaleX(${Math.min(cur + 0.05, 0.9)})`;
-    }, 500);
-  }
-
-  function stopProgress() {
-    clearInterval(progressBar._iv);
-    progressBar.style.transform = 'scaleX(1)';
-    setTimeout(() => { progressBar.style.transform = 'scaleX(0)'; progressBar.classList.remove('active'); }, 400);
-  }
+  function startProgress() { progressBar.classList.add('active'); progressBar.style.transform = 'scaleX(0.1)'; }
+  function stopProgress() { progressBar.style.transform = 'scaleX(1)'; setTimeout(() => { progressBar.style.transform = 'scaleX(0)'; }, 400); }
 </script>
 </body>
 </html>

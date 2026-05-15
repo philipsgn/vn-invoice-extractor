@@ -1,0 +1,135 @@
+{
+  "status": "partial",
+  "document_confidence": 0.0,
+  "seller": {
+    "name": {
+      "value": "CÔNG TY KẾ TOÁN THIÊN ƯNG",
+      "confidence": 0.95
+    },
+    "tax_code": {
+      "value": "0108892073",
+      "confidence": 0.95
+    },
+    "address": {
+      "value": "Số 16, Ngõ 247 Định Công Thượng, P. Định Công, Tp. Hà Nội.",
+      "confidence": 0.95
+    },
+    "phone": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "bank_account": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "bank_name": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "tax_authority_code": {
+      "value": "",
+      "confidence": 0.0
+    }
+  },
+  "buyer": {
+    "name": {
+      "value": "Công ty TNHH Dịch Vụ Bảo An",
+      "confidence": 0.95
+    },
+    "tax_code": {
+      "value": "0102256321",
+      "confidence": 0.95
+    },
+    "address": {
+      "value": "Số 15 đường Định Công, P. Định Công, TP. Hà Nội",
+      "confidence": 0.95
+    },
+    "full_name": {
+      "value": "",
+      "confidence": 0.0
+    }
+  },
+  "items": [
+    {
+      "name": {
+        "value": "Dịch vụ làm báo cáo thuế quý 1/2026",
+        "confidence": 0.99
+      },
+      "unit": {
+        "value": "",
+        "confidence": 0.0
+      },
+      "quantity": {
+        "value": 1.0,
+        "confidence": 0.99
+      },
+      "unit_price": {
+        "value": 1000000.0,
+        "confidence": 0.99
+      },
+      "total": {
+        "value": 1000000.0,
+        "confidence": 0.99
+      },
+      "discount": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "line_tax": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "row_total": {
+        "value": 0.0,
+        "confidence": 0.0
+      },
+      "vat_rate": "0"
+    }
+  ],
+  "invoice": {
+    "type": {
+      "value": "HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
+      "confidence": 0.95
+    },
+    "symbol": {
+      "value": "1C26TTU",
+      "confidence": 0.95
+    },
+    "number": {
+      "value": "00002486",
+      "confidence": 0.95
+    },
+    "date": {
+      "value": "{'value': '2026-04-16', 'confidence': 0.95}",
+      "confidence": 0.95
+    },
+    "payment_method": {
+      "value": "",
+      "confidence": 0.0
+    },
+    "currency": {
+      "value": "VND",
+      "confidence": 0.95
+    },
+    "vat_rate": "8",
+    "subtotal": {
+      "value": 1000000.0,
+      "confidence": 0.99
+    },
+    "vat_amount": {
+      "value": 80000.0,
+      "confidence": 0.99
+    },
+    "total_amount": {
+      "value": 1080000.0,
+      "confidence": 0.99
+    },
+    "vat_breakdown": []
+  },
+  "_validation": {
+    "errors": [],
+    "warnings": []
+  },
+  "_saved_at": "2026-05-15T12:47:59.777222",
+  "_filename": "norm_invoice_001.png"
+}

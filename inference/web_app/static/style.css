@@ -509,3 +509,48 @@ body::after {
   .workspace, .features { padding: 0 16px; }
   .footer { padding: 36px 16px 20px; }
 }
+/* ══════════════════════════════════════════
+   PROGRESS OVERLAY
+══════════════════════════════════════════ */
+.progress-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(6, 11, 20, 0.85);
+  backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.progress-card {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 24px; padding: 40px; width: 100%; max-width: 480px;
+  text-align: center; box-shadow: var(--shadow);
+}
+.progress-card h2 { font-size: 1.4rem; margin-bottom: 8px; color: #fff; }
+.progress-card p { color: var(--text2); font-size: 0.9rem; margin-bottom: 24px; }
+
+.progress-track {
+  height: 10px; background: var(--bg2); border-radius: 100px;
+  overflow: hidden; margin-bottom: 16px; border: 1px solid var(--border);
+}
+.progress-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  transition: width 0.4s ease;
+}
+
+.progress-stats {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 0.85rem; color: var(--accent);
+  margin-bottom: 24px;
+}
+.progress-current-file {
+  font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+  background: rgba(255,255,255,0.03); padding: 8px 12px;
+  border-radius: 8px; margin-bottom: 20px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.progress-timer {
+  font-family: var(--mono); font-size: 1.1rem; color: #fff;
+  font-weight: 700; background: var(--bg2); padding: 6px 16px;
+  border-radius: 100px; display: inline-block;
+  border: 1px solid var(--border);
+}
