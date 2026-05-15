@@ -288,32 +288,35 @@
         timerText.textContent = `${m}:${s}`;
       }, 1000);
       
+      // Start polling after a 2-second delay to allow server initialization
       let notFoundCount = 0;
-      const pollInterval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/v1/jobs/status/${jobId}`);
-          if (res.ok) {
-            notFoundCount = 0;
-            const status = await res.json();
-            const pct = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
-            
-            fill.style.width = pct + '%';
-            pctText.textContent = pct + '%';
-            countText.textContent = `Đã xử lý ${status.processed}/${status.total} hóa đơn`;
-            fileText.textContent = `Đang trích xuất: ${status.current_file}`;
-            
-            if (status.status === 'completed') {
-              clearInterval(pollInterval);
-              clearInterval(timerInterval);
-            }
-          } else if (res.status === 404) {
-            notFoundCount++;
-            if (notFoundCount > 5) { // Only fail after 5 consecutive 404s
-               console.warn("Job not yet found on server, retrying...");
-            }
-          }
-        } catch (err) { console.error('Poll error:', err); }
-      }, 800);
+      setTimeout(() => {
+          const pollInterval = setInterval(async () => {
+            try {
+              const res = await fetch(`/api/v1/jobs/status/${jobId}`);
+              if (res.ok) {
+                notFoundCount = 0;
+                const status = await res.json();
+                const pct = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+                
+                fill.style.width = pct + '%';
+                pctText.textContent = pct + '%';
+                countText.textContent = `Đã xử lý ${status.processed}/${status.total} hóa đơn`;
+                fileText.textContent = `Đang trích xuất: ${status.current_file}`;
+                
+                if (status.status === 'completed') {
+                  clearInterval(pollInterval);
+                  clearInterval(timerInterval);
+                }
+              } else if (res.status === 404) {
+                notFoundCount++;
+                if (notFoundCount > 10) { 
+                   console.warn("Job still not found after multiple retries.");
+                }
+              }
+            } catch (err) { console.error('Poll error:', err); }
+          }, 1000);
+      }, 2000);
       
       const formData = new FormData(zipForm);
       formData.append('job_id', jobId);
