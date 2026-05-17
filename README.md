@@ -250,6 +250,34 @@ cd inference/web_app
 python app.py
 ```
 
+### Localhost UI Preview
+
+After booting the service on `http://localhost:5000/`, the repository now exposes three recruiter-friendly proof points directly in the README:
+
+#### 1. Main extraction workspace on localhost
+
+This is the primary single-invoice UI rendered from `/`, showing the upload workspace, extraction panel, and polished operator-facing interface.
+
+<p align="center">
+  <img src="inference/results/home_vn_invoice.png" alt="VN-Invoice-Extractor localhost home screen" width="900">
+</p>
+
+#### 2. Live ZIP batch processing modal
+
+This screen demonstrates the asynchronous ZIP ingestion workflow on localhost, including live progress counters, timer tracking, and job polling while the background extraction thread is running.
+
+<p align="center">
+  <img src="inference/results/extraction_proccessing_vn_invoice.png" alt="VN-Invoice-Extractor localhost ZIP processing modal" width="900">
+</p>
+
+#### 3. Final dashboard rendered after batch completion
+
+Once the ZIP job finishes, the frontend redirects to `/dashboard/<job_id>` and renders the aggregated dashboard with invoice totals, VAT analytics, and detailed invoice inspection rows.
+
+<p align="center">
+  <img src="inference/results/dashboard_vn_invoice.png" alt="VN-Invoice-Extractor localhost dashboard view" width="900">
+</p>
+
 The application boot flow will:
 
 - initialize upload/temp/log/result directories
@@ -408,4 +436,3 @@ This is not a toy OCR demo. It is a serious ingestion system that blends:
 - validation-aware document engineering
 
 For a portfolio or CV, the value of `VN-Invoice-Extractor` is that it demonstrates end-to-end ownership across backend systems, applied AI, operational reliability, and product-facing data presentation in one coherent codebase.
-
