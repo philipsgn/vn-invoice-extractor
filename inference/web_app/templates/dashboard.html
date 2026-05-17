@@ -25,7 +25,7 @@
         <div class="flex justify-between items-end mb-10">
             <div>
                 <h1 class="text-4xl font-bold text-slate-900 tracking-tight">Invoice Analytics</h1>
-                <p class="text-slate-500 mt-2 text-lg">Phân tích chuyên sâu từ {{ details|length }} hóa đơn đã tải lên</p>
+                <p class="text-slate-500 mt-2 text-lg">Phân tích chuyên sâu từ {{ details|default([], true)|length }} hóa đơn đã tải lên</p>
             </div>
             <a href="/" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-1">
                 Tải tệp mới
@@ -36,15 +36,15 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
             <div class="glass-card p-8 rounded-[32px] border-l-8 border-emerald-500 shadow-sm">
                 <p class="text-slate-500 font-medium uppercase tracking-wider text-sm">Tổng thanh toán</p>
-                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ "{:,.0f}".format(summary.grand_total) }} <span class="text-lg font-normal text-slate-400 ml-1">VND</span></h3>
+                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ summary.grand_total|default(0, true)|safe_currency }} <span class="text-lg font-normal text-slate-400 ml-1">VND</span></h3>
             </div>
             <div class="glass-card p-8 rounded-[32px] border-l-8 border-blue-500 shadow-sm">
                 <p class="text-slate-500 font-medium uppercase tracking-wider text-sm">Tổng thuế VAT</p>
-                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ "{:,.0f}".format(summary.total_vat) }} <span class="text-lg font-normal text-slate-400 ml-1">VND</span></h3>
+                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ summary.total_vat|default(0, true)|safe_currency }} <span class="text-lg font-normal text-slate-400 ml-1">VND</span></h3>
             </div>
             <div class="glass-card p-8 rounded-[32px] border-l-8 border-indigo-500 shadow-sm">
                 <p class="text-slate-500 font-medium uppercase tracking-wider text-sm">Số lượng hóa đơn</p>
-                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ details|length }} <span class="text-lg font-normal text-slate-400 ml-1">Tệp</span></h3>
+                <h3 class="text-3xl font-bold text-slate-900 mt-2">{{ details|default([], true)|length }} <span class="text-lg font-normal text-slate-400 ml-1">Tệp</span></h3>
             </div>
         </div>
 
@@ -82,37 +82,47 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        {% for item in details %}
+                        {% for item in details|default([], true) %}
                         <tr class="invoice-row cursor-pointer transition-colors" onclick='openModal({{ loop.index0 }})'>
                             <td class="px-8 py-4">
                                 <div class="w-12 h-12 rounded-xl overflow-hidden bg-slate-200 border border-slate-100">
-                                    <img src="{{ item.image_url }}" class="w-full h-full object-cover">
+                                    <img src="{{ item.image_url|default('', true) }}" class="w-full h-full object-cover" alt="{{ item.filename|default('invoice-preview', true) }}">
                                 </div>
                             </td>
-                            <td class="px-8 py-4 font-semibold text-slate-700">{{ item.invoice_date }}</td>
+                            <td class="px-8 py-4 font-semibold text-slate-700">{{ item.invoice_date|default('-', true) }}</td>
                             <td class="px-8 py-4">
                                 <div class="flex flex-col gap-1">
                                     <div class="flex items-center gap-2">
                                         <span class="text-[10px] bg-slate-200 px-1 rounded font-bold text-slate-500">BÁN</span>
-                                        <div class="font-bold text-slate-900 truncate max-w-[200px]">{{ item.vendor_name }}</div>
+                                        <div class="font-bold text-slate-900 truncate max-w-[200px]">{{ item.vendor_name|default('Không xác định', true) }}</div>
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <span class="text-[10px] bg-indigo-100 px-1 rounded font-bold text-indigo-500">MUA</span>
-                                        <div class="text-sm text-slate-600 truncate max-w-[200px]">{{ item.buyer_name }}</div>
+                                        <div class="text-sm text-slate-600 truncate max-w-[200px]">{{ item.buyer_name|default('Không xác định', true) }}</div>
                                     </div>
-                                    <div class="text-xs text-slate-400 mt-1">MST: {{ item.vendor_tax_id }}</div>
+                                    <div class="text-xs text-slate-400 mt-1">MST: {{ item.vendor_tax_id|default('-', true) }}</div>
                                 </div>
                             </td>
                             <td class="px-8 py-4">
-                                <span class="px-3 py-1 rounded-full text-xs font-bold {{ 'bg-emerald-100 text-emerald-700' if item.invoice_type == 'GTGT' else 'bg-blue-100 text-blue-700' }}">
-                                    {{ item.invoice_type }}
+                                <span class="px-3 py-1 rounded-full text-xs font-bold {{ 'bg-emerald-100 text-emerald-700' if item.invoice_type|default('BAN_HANG', true) == 'GTGT' else 'bg-blue-100 text-blue-700' }}">
+                                    {{ item.invoice_type|default('BAN_HANG', true) }}
                                 </span>
                             </td>
                             <td class="px-8 py-4 text-right font-bold text-indigo-600 text-lg">
-                                {{ "{:,.0f}".format(item.total_amount) }}
+                                {{ item.total_amount|default(0, true)|safe_currency }}
                             </td>
                         </tr>
                         {% endfor %}
+                        {% if not details %}
+                        <tr>
+                            <td colspan="5" class="px-8 py-10 text-center text-slate-400">KhÃ´ng cÃ³ dá»¯ liá»‡u hÃ³a Ä‘Æ¡n Ä‘á»ƒ hiá»ƒn thá»‹.</td>
+                        </tr>
+                        {% endif %}
+                        {% if not details %}
+                        <tr>
+                            <td colspan="5" class="px-8 py-10 text-center text-slate-400">Không có dữ liệu hóa đơn để hiển thị.</td>
+                        </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -193,7 +203,7 @@
 
     <script>
         // Dữ liệu từ Backend
-        const rawData = {{ details | tojson }};
+        const rawData = {{ details | default([], true) | tojson }};
         let currentIndex = -1;
 
         // --- Chart.js Config ---
@@ -203,7 +213,7 @@
             data: {
                 labels: ['GTGT', 'Bán hàng'],
                 datasets: [{
-                    data: [{{ summary.count_gtgt }}, {{ summary.count_banhang }}],
+                    data: [{{ summary.count_gtgt|default(0, true) }}, {{ summary.count_banhang|default(0, true) }}],
                     backgroundColor: ['#10b981', '#3b82f6'],
                     borderWidth: 0,
                     cutout: '75%'
@@ -216,10 +226,10 @@
         new Chart(ctxLine, {
             type: 'line',
             data: {
-                labels: {{ summary.chart_timeline | map(attribute='date') | list | tojson }},
+                labels: {{ summary.chart_timeline|default([], true) | map(attribute='date') | list | tojson }},
                 datasets: [{
                     label: 'Tổng tiền',
-                    data: {{ summary.chart_timeline | map(attribute='total') | list | tojson }},
+                    data: {{ summary.chart_timeline|default([], true) | map(attribute='total') | list | tojson }},
                     borderColor: '#6366f1',
                     tension: 0.4,
                     fill: true,
@@ -237,16 +247,17 @@
         function openModal(index) {
             currentIndex = index;
             const item = rawData[index];
+            if (!item) return;
             
-            document.getElementById('modalImg').src = item.image_url;
-            document.getElementById('m_type').value = item.invoice_type;
-            document.getElementById('m_vendor').value = item.vendor_name;
+            document.getElementById('modalImg').src = item.image_url || '';
+            document.getElementById('m_type').value = item.invoice_type || 'BAN_HANG';
+            document.getElementById('m_vendor').value = item.vendor_name || "Khong xac dinh";
             document.getElementById('m_buyer').value = item.buyer_name || "Không xác định";
-            document.getElementById('m_tax').value = item.vendor_tax_id;
-            document.getElementById('m_date').value = item.invoice_date;
-            document.getElementById('m_net').value = item.net_amount;
-            document.getElementById('m_vat').value = item.vat_amount;
-            document.getElementById('m_total').value = item.total_amount;
+            document.getElementById('m_tax').value = item.vendor_tax_id || '';
+            document.getElementById('m_date').value = item.invoice_date || '';
+            document.getElementById('m_net').value = item.net_amount ?? 0;
+            document.getElementById('m_vat').value = item.vat_amount ?? 0;
+            document.getElementById('m_total').value = item.total_amount ?? 0;
             
             document.getElementById('editModal').classList.remove('hidden');
         }

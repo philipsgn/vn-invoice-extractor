@@ -1,207 +1,104 @@
 {
-  "status": "success",
-  "document_confidence": 0.7998,
+  "status": "failed",
+  "document_confidence": 0.6498,
   "seller": {
-    "name": {
-      "value": "CÔNG TY KẾ TOÁN THIÊN UNG",
-      "confidence": 0.9461
-    },
-    "tax_code": {
-      "value": "0108892073",
-      "confidence": 0.8951
-    },
-    "address": {
-      "value": "Số 16, Ngõ 247 Định Công Thượng, P. Định Công, Tp. Hà Nội",
-      "confidence": 0.9869
-    },
-    "phone": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "bank_account": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "bank_name": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "tax_authority_code": {
-      "value": "596SRE2THC245945FGHTL8H4D23W3HB6D5",
-      "confidence": 0.6176
-    }
+    "name": "CÔNG TY KẾ TOÁN THIÊN UNG",
+    "tax_code": "0108892073",
+    "address": "Số 16, Ngõ 247 Định Công Thượng, P. Định Công, Tp. Hà Nội",
+    "phone": "",
+    "bank_account": "",
+    "bank_name": "",
+    "tax_authority_code": "596SRE2THC245945FGHTL8H4D23W3HB6D5"
   },
   "buyer": {
-    "name": {
-      "value": "VỊ: CÔNG TY TNHH DỊCH VỤ BẢO",
-      "confidence": 0.0
-    },
-    "tax_code": {
-      "value": "0102256321",
-      "confidence": 0.9996
-    },
-    "address": {
-      "value": "Số 15 đường Định Công, P. Định Công, TP. Hà Nội",
-      "confidence": 0.9975
-    },
-    "full_name": {
-      "value": "KÊ TOÁN THIÊN UNG",
-      "confidence": 0.0
-    }
+    "name": "VỊ: CÔNG TY TNHH DỊCH VỤ BẢO",
+    "tax_code": "0102256321",
+    "address": "Số 15 đường Định Công, P. Định Công, TP. Hà Nội",
+    "full_name": "KÊ TOÁN THIÊN UNG"
   },
   "items": [
     {
-      "name": {
-        "value": "Dịch vụ làm báo cáo thuế",
-        "confidence": 1.0
-      },
-      "unit": {
-        "value": "1.000.000",
-        "confidence": 0.6
-      },
-      "quantity": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "unit_price": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "discount": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "line_tax": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "row_total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
+      "name": "Dịch vụ làm báo cáo thuế",
+      "unit": "1.000.000",
+      "quantity": 0.0,
+      "unit_price": 0.0,
+      "total": 0.0,
+      "discount": 0.0,
+      "line_tax": 0.0,
+      "row_total": 0.0,
       "vat_rate": "0"
     },
     {
-      "name": {
-        "value": "qúy 1/2026",
-        "confidence": 1.0
-      },
-      "unit": {
-        "value": "1.000.000",
-        "confidence": 0.9977
-      },
-      "quantity": {
-        "value": 1.0,
-        "confidence": 1.0
-      },
-      "unit_price": {
-        "value": 1000000.0,
-        "confidence": 0.7651
-      },
-      "total": {
-        "value": 1000000.0,
-        "confidence": 0.9564
-      },
-      "discount": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "line_tax": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "row_total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "vat_rate": "0"
-    },
-    {
-      "name": {
-        "value": "KÊ TOÁN",
-        "confidence": 1.0
-      },
-      "unit": {
-        "value": "1.000.000",
-        "confidence": 0.6
-      },
-      "quantity": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "unit_price": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "discount": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "line_tax": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "row_total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
+      "name": "qúy 1/2026 KÊ TOÁN",
+      "unit": "1.000.000",
+      "quantity": 1.0,
+      "unit_price": 1000000.0,
+      "total": 1000000.0,
+      "discount": 0.0,
+      "line_tax": 0.0,
+      "row_total": 0.0,
       "vat_rate": "0"
     }
   ],
   "invoice": {
-    "type": {
-      "value": "HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
-      "confidence": 0.9803
-    },
-    "symbol": {
-      "value": "1C26TTU",
-      "confidence": 0.9987
-    },
-    "number": {
-      "value": "00002486",
-      "confidence": 0.9804
-    },
-    "date": {
-      "value": "{'value': 'Ngày 16 tháng 04 năm 2026', 'confidence': 0.9949}",
-      "confidence": 0.9949
-    },
-    "payment_method": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "currency": {
-      "value": "VND",
-      "confidence": 0.0
-    },
+    "type": "HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
+    "symbol": "1C26TTU",
+    "number": "00002486",
+    "date": "Ngày 16 tháng 04 năm 2026",
+    "payment_method": "",
+    "currency": "VND",
     "vat_rate": "0",
-    "subtotal": {
-      "value": 0.0,
-      "confidence": 0.0
-    },
-    "vat_amount": {
-      "value": 80000.0,
-      "confidence": 0.9999
-    },
-    "total_amount": {
-      "value": 1080000.0,
-      "confidence": 1.0
-    },
+    "subtotal": "0 ₫",
+    "vat_amount": "80.000 ₫",
+    "total_amount": "1.080.000 ₫",
     "vat_breakdown": []
   },
   "_validation": {
     "errors": [
-      "Total sum mismatch: subtotal(0) + vat_amount(80000) = 80000, but total_amount = 1080000 (diff=1000000)"
+      "Total sum mismatch: subtotal(0) + vat_amount(80000) = 80000, but total_amount = 1080000 (diff=1000000)",
+      "Total sum mismatch: subtotal(0) + vat_amount(80000) = 80000, but total_amount=1080000"
     ],
     "warnings": []
   },
-  "_saved_at": "2026-05-15T13:27:44.468201",
+  "extraction_engine": "layoutlmv3_fallback",
+  "warnings": [
+    "Gemini quota exhausted; result produced by local LayoutLMv3 model"
+  ],
+  "_field_confidences": {
+    "invoice": {
+      "type": 0.9803,
+      "symbol": 0.9987,
+      "number": 0.9804,
+      "date": 0.9949,
+      "payment_method": 0.0,
+      "currency": 0.0,
+      "vat_rate": 1.0,
+      "subtotal": 0.0,
+      "vat_amount": 0.9999,
+      "total_amount": 1.0,
+      "vat_breakdown": 1.0
+    },
+    "seller": {
+      "name": 0.9461,
+      "tax_code": 0.8951,
+      "address": 0.9869,
+      "phone": 0.0,
+      "bank_account": 0.0,
+      "bank_name": 0.0,
+      "tax_authority_code": 0.6176
+    },
+    "buyer": {
+      "name": 0.0,
+      "tax_code": 0.9996,
+      "address": 0.9975,
+      "full_name": 0.0
+    }
+  },
+  "_field_warnings": {
+    "buyer_name": "Tên người mua",
+    "net_amount": "Tiền hàng"
+  },
+  "_low_conf_count": 2,
+  "_saved_at": "2026-05-17T12:27:24.696192",
   "_filename": "norm_invoice_001.png"
 }

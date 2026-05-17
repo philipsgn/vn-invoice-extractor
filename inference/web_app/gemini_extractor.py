@@ -30,75 +30,58 @@ TIMEOUT_SEC  = 30
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Extraction Prompt (Senior OCR Vietnamese Invoice Expert) ──────────────────
-INVOICE_EXTRACTION_PROMPT = """Bạn là chuyên gia OCR trích xuất hóa đơn Việt Nam với 10 năm kinh nghiệm.
-Phân tích hóa đơn trong ảnh và trả về JSON theo schema bên dưới.
+INVOICE_EXTRACTION_PROMPT = """# ROLE & OBJECTIVE
+You are a world-class Document AI Agent specializing in Vietnamese Financial Documents (Hóa đơn Giá trị gia tăng & Hóa đơn bán hàng). Your absolute objective is to extract ALL information from the provided invoice image/PDF with 100% accuracy and output a strict, valid JSON object matching the defined schema. Do not include any markdown formatting (like ```json) or conversational text outside the JSON.
 
-═══ QUY TẮC BẮT BUỘC ═══
+# INVOICE TYPE LOGIC (CRITICAL)
+- If the invoice title contains "GIÁ TRỊ GIA TĂNG" or "VAT INVOICE": Set "invoice_type" to "HOA_DON_GTGT". You MUST extract "vat_rate" and "vat_amount".
+- If the invoice title contains "BÁN HÀNG" or does not specify VAT: Set "invoice_type" to "HOA_DON_BAN_HANG". Set "vat_rate" to null and "vat_amount" to 0.
 
-1. CHỈ trả về JSON thuần túy — KHÔNG có markdown, KHÔNG có ```json, KHÔNG có giải thích
-2. Số tiền là số NGUYÊN, KHÔNG có dấu chấm/phẩy (ví dụ: 1500000 không phải 1.500.000)
-3. Mã số thuế: 10 số, 13 số, hoặc định dạng 10-3 (ví dụ: 0123456789-001)
-4. Ngày tháng: định dạng YYYY-MM-DD
-5. unit_price × quantity − discount = total (kiểm tra toán học mỗi dòng)
-6. ĐVT (unit) lấy CHÍNH XÁC từ hóa đơn: Cái/Hộp/Kg/Lít/m/Chiếc/Chai/Gói/Bộ/Cuộn/Tấm/Thùng/Cây/Viên/...
-7. Nếu trường không có trong hóa đơn: string → "" (rỗng), number → 0
-8. Phân biệt rõ:
-   - Hóa đơn GTGT: có "Thuế GTGT", mã số thuế cả bên bán và bên mua
-   - Hóa đơn bán hàng: không có dòng thuế GTGT riêng
-9. subtotal (Cộng tiền hàng/Tổng tiền trước thuế) KHÁC total_amount (Tổng thanh toán)
-10. Khi có 2 mức thuế (10% và 8%): ghi vat_rate = "10%,8%", tính tổng vat_amount
+# DATA EXTRACTION EXTRA RULES
+- Numbers: Extract all monetary amounts, quantities, and prices as numeric values (float/int), removing any currency symbols (đ, VND) or thousands separators (.) from the final JSON values.
+- Dates: Standardize all dates to "YYYY-MM-DD" format.
+- Fallback: If a field does not exist or is completely unreadable, return null (or 0 for numeric financial fields if applicable).
 
-═══ JSON SCHEMA ═══
-
+# OUTPUT JSON SCHEMA
 {
-  "invoice_type": "HÓA ĐƠN BÁN HÀNG hoặc HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
+  "invoice_type": "HOA_DON_GTGT" | "HOA_DON_BAN_HANG",
+  "invoice_metadata": {
+    "form_number": string or null,
+    "serial_number": string or null,
+    "invoice_number": string or null,
+    "invoice_date": "YYYY-MM-DD" or null
+  },
   "seller": {
-    "name":              "tên công ty/hộ kinh doanh bên bán",
-    "tax_code":          "mã số thuế bên bán",
-    "address":           "địa chỉ đầy đủ bên bán",
-    "phone":             "số điện thoại hoặc rỗng",
-    "bank_account":      "số tài khoản ngân hàng hoặc rỗng",
-    "bank_name":         "tên ngân hàng hoặc rỗng",
-    "tax_authority_code":"mã cơ quan thuế (ví dụ T01N/1234567) hoặc rỗng"
+    "company_name": string or null,
+    "tax_code": string or null,
+    "address": string or null
   },
   "buyer": {
-    "name":      "tên công ty/cá nhân bên mua",
-    "tax_code":  "mã số thuế bên mua hoặc rỗng",
-    "address":   "địa chỉ đầy đủ bên mua",
-    "full_name": "họ tên người mua hàng hoặc rỗng"
+    "company_name": string or null,
+    "tax_code": string or null,
+    "address": string or null
   },
-  "invoice": {
-    "symbol":         "ký hiệu hóa đơn (ví dụ: 1K17KC, 2C26MY)",
-    "number":         "số hóa đơn",
-    "date":           "YYYY-MM-DD",
-    "payment_method": "Tiền mặt / Chuyển khoản / TM/CK",
-    "currency":       "VND",
-    "subtotal":       số nguyên (Cộng tiền hàng/Tổng tiền chưa thuế),
-    "vat_rate":       "10% hoặc 8% hoặc 0% hoặc 10%,8% nếu có 2 mức hoặc rỗng",
-    "vat_amount":     số nguyên (tổng tiền thuế GTGT),
-    "total_amount":   số nguyên (Tổng cộng thanh toán cuối cùng)
-  },
-  "items": [
+  "line_items": [
     {
-      "name":       "tên hàng hóa/dịch vụ đầy đủ",
-      "unit":       "đơn vị tính chính xác từ hóa đơn",
-      "quantity":   số nguyên hoặc số thực,
-      "unit_price": số nguyên (đơn giá trước chiết khấu),
-      "discount":   số nguyên (tiền chiết khấu, 0 nếu không có),
-      "total":      số nguyên (thành tiền sau chiết khấu),
-      "vat_rate":   "thuế suất dòng này nếu có, rỗng nếu không"
+      "sequence_number": int or null,
+      "item_name": string or null,
+      "unit": string or null,
+      "quantity": float or null,
+      "unit_price": float or null,
+      "total_amount": float or null
     }
-  ]
+  ],
+  "financial_summary": {
+    "subtotal_amount": float, 
+    "vat_rate_percentage": float or null,
+    "vat_amount": float,
+    "total_amount": float
+  }
 }
 
-═══ LƯU Ý ĐẶC BIỆT ═══
-
-- "Cộng tiền hàng" hoặc "Tổng tiền hàng" = subtotal (KHÔNG phải total_amount)
-- "Tổng cộng thanh toán" hoặc "Tổng thanh toán" = total_amount
-- Tiền chiết khấu: có thể là "CK", "Chiết khấu", "Giảm giá" trong bảng items
-- Mã CQT có thể nằm ở vị trí bất kỳ trên hóa đơn, thường format: T01N/XXXXXXX
-- Số tài khoản ngân hàng: thường sau "STK:", "Số TK:", "Tài khoản:"
-- Nếu thấy 2 bảng thuế (10% và 8%), liệt kê tổng cả hai vào vat_amount"""
+# STRICT ENFORCEMENT
+- Double check the mathematical alignment: financial_summary.subtotal_amount + financial_summary.vat_amount MUST equal financial_summary.total_amount.
+- Output ONLY the raw JSON string."""
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -209,7 +192,7 @@ class GeminiExtractor:
     def _normalize(self, raw: dict) -> dict:
         """
         Normalize Gemini output to exact pipeline schema.
-        Adds confidence scores based on field presence and math validation.
+        Maps the new English schema back to the internal Vietnamese-compatible schema.
         """
         result = {
             "seller":  {},
@@ -218,78 +201,74 @@ class GeminiExtractor:
             "items":   [],
         }
 
+        inv_meta = raw.get("invoice_metadata", {}) or {}
+        seller_raw = raw.get("seller", {}) or {}
+        buyer_raw  = raw.get("buyer", {}) or {}
+        summary    = raw.get("financial_summary", {}) or {}
+
         # ── Seller ────────────────────────────────────────────────────────────
-        seller = raw.get("seller", {}) or {}
-        for field in ["name", "tax_code", "address", "phone",
-                      "bank_account", "bank_name", "tax_authority_code"]:
-            val = seller.get(field, "")
-            result["seller"][field] = self._wrap(val or "")
+        result["seller"]["name"]     = self._wrap(seller_raw.get("company_name") or "")
+        result["seller"]["tax_code"] = self._wrap(seller_raw.get("tax_code") or "")
+        result["seller"]["address"]  = self._wrap(seller_raw.get("address") or "")
+        # Empty fallbacks for compatibility
+        for f in ["phone", "bank_account", "bank_name", "tax_authority_code"]:
+            result["seller"][f] = self._wrap("")
 
         # ── Buyer ─────────────────────────────────────────────────────────────
-        buyer = raw.get("buyer", {}) or {}
-        for field in ["name", "tax_code", "address", "full_name"]:
-            val = buyer.get(field, "")
-            result["buyer"][field] = self._wrap(val or "")
+        result["buyer"]["name"]     = self._wrap(buyer_raw.get("company_name") or "")
+        result["buyer"]["tax_code"] = self._wrap(buyer_raw.get("tax_code") or "")
+        result["buyer"]["address"]  = self._wrap(buyer_raw.get("address") or "")
+        result["buyer"]["full_name"] = self._wrap("")
 
         # ── Invoice ───────────────────────────────────────────────────────────
-        inv = raw.get("invoice", {}) or {}
-        for field in ["symbol", "number", "date", "payment_method",
-                      "currency", "vat_rate"]:
-            val = inv.get(field, "")
-            result["invoice"][field] = self._wrap(val or "")
+        result["invoice"]["number"] = self._wrap(inv_meta.get("invoice_number") or "")
+        result["invoice"]["date"]   = self._wrap(inv_meta.get("invoice_date") or "")
+        result["invoice"]["symbol"] = self._wrap(inv_meta.get("serial_number") or "")
+        
+        # Type mapping for UI consistency
+        raw_type = raw.get("invoice_type", "")
+        mapped_type = "GTGT" if "GTGT" in str(raw_type) else "BAN_HANG"
+        result["invoice"]["type"] = self._wrap(mapped_type)
 
-        result["invoice"]["type"] = self._wrap(
-            raw.get("invoice_type", inv.get("type", "HÓA ĐƠN BÁN HÀNG"))
-        )
+        subtotal     = self._safe_int(summary.get("subtotal_amount", 0))
+        vat_amount   = self._safe_int(summary.get("vat_amount", 0))
+        total_amount = self._safe_int(summary.get("total_amount", 0))
+        vat_rate     = str(summary.get("vat_rate_percentage") or "")
 
-        subtotal     = self._safe_int(inv.get("subtotal",     0))
-        vat_amount   = self._safe_int(inv.get("vat_amount",   0))
-        total_amount = self._safe_int(inv.get("total_amount", 0))
-
-        # Validate footer math
-        if subtotal > 0 and vat_amount >= 0 and total_amount > 0:
-            expected = subtotal + vat_amount
-            footer_conf = 0.99 if abs(expected - total_amount) / max(total_amount, 1) < 0.02 else 0.75
+        # Math validation for confidence
+        if subtotal > 0 and total_amount > 0:
+            footer_conf = 0.99 if abs((subtotal + vat_amount) - total_amount) < 2 else 0.80
         else:
             footer_conf = 0.85
 
         result["invoice"]["subtotal"]     = self._wrap(subtotal,     footer_conf)
         result["invoice"]["vat_amount"]   = self._wrap(vat_amount,   footer_conf)
         result["invoice"]["total_amount"] = self._wrap(total_amount, footer_conf)
-        result["invoice"]["vat_breakdown"] = []
+        result["invoice"]["vat_rate"]     = self._wrap(vat_rate)
+        
+        for f in ["payment_method", "currency"]:
+            result["invoice"][f] = self._wrap("")
 
         # ── Items ─────────────────────────────────────────────────────────────
-        for item in raw.get("items", []) or []:
-            name      = str(item.get("name",       "") or "").strip()
-            unit      = str(item.get("unit",       "") or "").strip()
-            qty       = item.get("quantity",   0) or 0
-            price     = self._safe_int(item.get("unit_price", 0))
-            disc      = self._safe_int(item.get("discount",   0))
-            total     = self._safe_int(item.get("total",      0))
-            vat_rate  = str(item.get("vat_rate",   "") or "").strip()
-
-            # Math validation for confidence
-            if qty > 0 and price > 0 and total > 0:
-                expected  = qty * price - disc
-                ratio     = expected / total if total > 0 else 0
-                math_ok   = abs(ratio - 1.0) < 0.02   # 2% tolerance
-                item_conf = 0.99 if math_ok else 0.75
-
-                # Auto-correct unit_price if math wrong and total is reliable
-                if not math_ok and total > 0 and qty > 0:
-                    price = round((total + disc) / qty)
-                    item_conf = 0.85  # computed, slightly less confident
-            else:
-                item_conf = 0.90
-
+        for item in raw.get("line_items", []) or []:
+            name  = str(item.get("item_name") or "").strip()
+            unit  = str(item.get("unit") or "").strip()
+            qty   = item.get("quantity") or 0
+            price = self._safe_int(item.get("unit_price", 0))
+            total = self._safe_int(item.get("total_amount", 0))
+            
+            # Math validation
+            expected = (qty or 0) * (price or 0)
+            item_conf = 0.99 if abs(expected - total) < 2 else 0.80
+            
             result["items"].append({
-                "name":       self._wrap(name,   0.99),
-                "unit":       self._wrap(unit,   0.95 if unit else 0.0),
-                "quantity":   self._wrap(qty,    item_conf),
-                "unit_price": self._wrap(price,  item_conf),
-                "discount":   self._wrap(disc,   0.95 if disc > 0 else 0.0),
-                "total":      self._wrap(total,  item_conf),
-                "vat_rate":   self._wrap(vat_rate, 0.90 if vat_rate else 0.0),
+                "name":       self._wrap(name, 0.99),
+                "unit":       self._wrap(unit, 0.95 if unit else 0.0),
+                "quantity":   self._wrap(qty, item_conf),
+                "unit_price": self._wrap(price, item_conf),
+                "total":      self._wrap(total, item_conf),
+                "discount":   self._wrap(0, 0.0),
+                "vat_rate":   self._wrap("", 0.0),
                 "line_tax":   self._wrap(0, 0.0),
                 "row_total":  self._wrap(0, 0.0),
                 "discount_rate": self._wrap("", 0.0),

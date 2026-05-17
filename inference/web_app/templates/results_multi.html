@@ -68,9 +68,16 @@
       font-size: 0.72rem; font-weight: 700; padding: 4px 10px;
       border-radius: 20px; text-transform: uppercase; letter-spacing: .5px;
     }
-    .badge-ok     { background: rgba(0,212,170,.15); color: var(--accent2); }
-    .badge-partial { background: rgba(255,193,7,.15);  color: #ffc107; }
     .badge-error  { background: rgba(255,107,107,.15); color: var(--warn); }
+
+    .warn-badge {
+      background: #FEF3C7; color: #92400E;
+      font-size: 0.72rem; font-weight: 700; padding: 4px 10px;
+      border-radius: 20px; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .field-warn {
+      color: #92400E; cursor: help; margin-left: 4px; font-weight: bold;
+    }
 
     .card-body { display: grid; grid-template-columns: 280px 1fr; gap: 0; }
 
@@ -181,7 +188,11 @@
   <div class="invoice-card">
     <div class="card-header">
       <span class="fname">📎 {{ inv.filename }}</span>
-      <span class="badge badge-{{ inv.status }}">{{ inv.status }}</span>
+      {% if inv.status == 'error' %}
+        <span class="badge badge-error">LỖI XỬ LÝ</span>
+      {% elif inv.low_conf_count > 0 %}
+        <span class="warn-badge">⚠ {{ inv.low_conf_count }} trường cần xác nhận</span>
+      {% endif %}
     </div>
 
     <div class="card-body">
@@ -197,16 +208,16 @@
         <div class="amounts-row">
           <div class="amount-cell">
             <div class="label">Tiền hàng (Net)</div>
-            <div class="value">{{ "{:,.0f}".format(inv.net_amount) }} ₫</div>
+            <div class="value">{{ inv.net_amount }}{% if "net_amount" in inv.field_warnings %}<span title="{{ inv.field_warnings.net_amount }} cần xác nhận" class="field-warn">⚠</span>{% endif %}</div>
           </div>
           <div class="amount-cell">
             <div class="label">Thuế VAT</div>
-            <div class="value">{{ "{:,.0f}".format(inv.vat_amount) }} ₫</div>
+            <div class="value">{{ inv.vat_amount }}{% if "tax_amount" in inv.field_warnings %}<span title="{{ inv.field_warnings.tax_amount }} cần xác nhận" class="field-warn">⚠</span>{% endif %}</div>
           </div>
           <div class="amount-cell">
             <div class="label">Tổng thanh toán</div>
             <div class="value" style="color:#fff;font-size:1.25rem">
-              {{ "{:,.0f}".format(inv.total_amount) }} ₫
+              {{ inv.total_amount }}{% if "total_amount" in inv.field_warnings %}<span title="{{ inv.field_warnings.total_amount }} cần xác nhận" class="field-warn">⚠</span>{% endif %}
             </div>
           </div>
         </div>
@@ -215,34 +226,35 @@
         <div class="fields-grid">
           <div class="field-item">
             <label>Loại hóa đơn</label>
-            <input value="{{ inv.invoice_type }}" />
+            <input class="edit-invoice-type" value="{{ inv.invoice_type }}" />{% if "invoice_type" in inv.field_warnings %}<span title="{{ inv.field_warnings.invoice_type }} cần xác nhận" class="field-warn">⚠</span>{% endif %}
           </div>
           <div class="field-item">
             <label>Ngày hóa đơn</label>
-            <input value="{{ inv.invoice_date or '' }}" />
+            <input class="edit-invoice-date" value="{{ inv.invoice_date or '' }}" />{% if "invoice_date" in inv.field_warnings %}<span title="{{ inv.field_warnings.invoice_date }} cần xác nhận" class="field-warn">⚠</span>{% endif %}
+          </div>
+          <div class="field-item">
+            <label>Số hóa đơn</label>
+            <input class="edit-invoice-number" value="{{ inv.invoice_number }}" />
           </div>
           <div class="field-item">
             <label>Nhà cung cấp</label>
-            <input value="{{ inv.vendor_name }}" />
+            <input class="edit-seller-name" value="{{ inv.vendor_name }}" />{% if "seller_name" in inv.field_warnings %}<span title="{{ inv.field_warnings.seller_name }} cần xác nhận" class="field-warn">⚠</span>{% endif %}
           </div>
           <div class="field-item">
             <label>Mã số thuế NCC</label>
-            <input value="{{ inv.vendor_tax_id or '' }}" />
+            <input class="edit-seller-tax-code" value="{{ inv.vendor_tax_id or '' }}" />{% if "seller_tax_code" in inv.field_warnings %}<span title="{{ inv.field_warnings.seller_tax_code }} cần xác nhận" class="field-warn">⚠</span>{% endif %}
           </div>
-          <div class="field-item full-width">
+          <div class="field-item">
             <label>Bên mua</label>
-            <input value="{{ inv.buyer_name }}" />
+            <input class="edit-buyer-name" value="{{ inv.buyer_name }}" />{% if "buyer_name" in inv.field_warnings %}<span title="{{ inv.field_warnings.buyer_name }} cần xác nhận" class="field-warn">⚠</span>{% endif %}
+          </div>
+          <div class="field-item">
+            <label>Mã số thuế bên mua</label>
+            <input class="edit-buyer-tax-code" value="{{ inv.buyer_tax_id or '' }}" />
           </div>
         </div>
 
-        <!-- Confidence -->
-        <div class="conf-bar">
-          <span>Độ tin cậy</span>
-          <div class="conf-bar-track">
-            <div class="conf-bar-fill" style="width:{{ (inv.confidence * 100)|int }}%"></div>
-          </div>
-          <span>{{ (inv.confidence * 100)|int }}%</span>
-        </div>
+        <!-- Confidence purged (Rule 1) -->
 
         <!-- Items Table -->
         {% if inv.line_items %}
@@ -280,12 +292,23 @@
         </div>
         {% endif %}
 
-        <!-- Save Button -->
-        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+        <!-- Action Buttons & Raw JSON -->
+        <div style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+          <button class="btn-view-json" style="background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+            { } Xem Raw JSON
+          </button>
           <button onclick="saveInvoice('{{ inv.filename }}', {{ loop.index0 }})" 
-                  style="background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                  style="background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
             💾 Lưu thay đổi
           </button>
+        </div>
+
+        <div class="raw-json-container hidden" style="margin-top: 15px; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #252538; padding: 5px 15px; border-radius: 6px 6px 0 0;">
+                <span style="font-size: 12px; color: #8ec07c; font-family: monospace;">RAW_DATA.JSON</span>
+                <button class="btn-copy-json" style="background: transparent; border: none; color: #a89984; cursor: pointer; font-size: 12px;">📄 Sao chép</button>
+            </div>
+            <pre style="margin: 0; background: #1e1e2e; color: #a6e3a1; padding: 15px; border-radius: 0 0 8px 8px; overflow-x: auto; font-family: 'Fira Code', monospace; font-size: 13px; text-align: left;"><code class="language-json">{{ inv.raw_json }}</code></pre>
         </div>
 
       </div><!-- /fields-panel -->
@@ -296,6 +319,42 @@
 </main>
 
 <script>
+function formatVND(amount) {
+  if (amount === null || amount === undefined || amount === '') return '—';
+  try {
+    const val = Math.round(parseFloat(amount));
+    if (isNaN(val)) return '—';
+    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " ₫";
+  } catch (e) {
+    return '—';
+  }
+}
+
+document.addEventListener('click', async function(e) {
+  if (e.target.matches('.btn-view-json')) {
+    const container = e.target.closest('.fields-panel').querySelector('.raw-json-container');
+    if (container) {
+      if (container.style.display === 'none' || container.classList.contains('hidden')) {
+        container.style.display = 'block';
+        container.classList.remove('hidden');
+      } else {
+        container.style.display = 'none';
+        container.classList.add('hidden');
+      }
+    }
+  } else if (e.target.matches('.btn-copy-json')) {
+    const code = e.target.closest('.raw-json-container').querySelector('code');
+    if (code) {
+      try {
+        await navigator.clipboard.writeText(code.innerText);
+        alert('Đã sao chép Raw JSON vào clipboard!');
+      } catch (err) {
+        alert('Lỗi sao chép: ' + err);
+      }
+    }
+  }
+});
+
 async function saveInvoice(filename, index) {
   const card = document.querySelectorAll('.invoice-card')[index];
   
@@ -315,6 +374,13 @@ async function saveInvoice(filename, index) {
   // 2. Prepare payload
   const payload = {
     filename: filename,
+    invoice_type: card.querySelector('.edit-invoice-type')?.value,
+    invoice_date: card.querySelector('.edit-invoice-date')?.value,
+    invoice_number: card.querySelector('.edit-invoice-number')?.value,
+    seller_name: card.querySelector('.edit-seller-name')?.value,
+    seller_tax_code: card.querySelector('.edit-seller-tax-code')?.value,
+    buyer_name: card.querySelector('.edit-buyer-name')?.value,
+    buyer_tax_code: card.querySelector('.edit-buyer-tax-code')?.value,
     line_items: line_items
   };
 

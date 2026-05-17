@@ -65,6 +65,9 @@ import uuid
 import zipfile
 from collections import defaultdict, deque
 from datetime import datetime, timezone
+
+inference_lock = threading.Lock()
+
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -77,7 +80,8 @@ import numpy as np
 from PIL import Image
 
 import torch
-torch.set_num_threads(1) # Prevent over-threading on CPU
+torch.set_num_threads(2)
+torch.set_num_interop_threads(2)
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
 
 from flask import Flask, g, jsonify, render_template, request
@@ -128,7 +132,33 @@ except ImportError as _e:
     GEMINI_EXTRACTOR = None
     GEMINI_ENABLED   = False
     print(f"[Gemini] gemini_extractor not found: {_e}")
-#                                                                                                                                                                                           
+
+def extract_field_value(field):
+    """Extract display value from pipeline field (FORMAT A or FORMAT B)."""
+    try:
+        if field is None:
+            return None
+        # Use robust safe_unwrap to handle double-wrapped strings/dicts (Bug Fix)
+        val, _ = safe_unwrap(field)
+        # Preserve Prompt #1 contract: return None if it's a dict without "value"
+        if isinstance(val, dict) and "value" not in val:
+            return None
+        return val
+    except Exception:
+        return None
+
+def format_vnd(amount):
+    """Format money amount to VND display format (dot separators, space before ₫)."""
+    try:
+        if amount is None or amount == "":
+            return "—"
+        if isinstance(amount, str):
+            # Clean string if it already contains currency markers or separators
+            amount = amount.replace(".", "").replace(",", "").replace("₫", "").replace("VND", "").strip()
+        val = int(round(float(amount)))
+        return "{:,.0f}".format(val).replace(",", ".") + " ₫"
+    except (ValueError, TypeError, OverflowError):
+        return "—"
 
 
 #                                                                                                                                                                                                          
@@ -169,6 +199,19 @@ class JobManager:
 job_manager = JobManager()
 app = Flask(__name__)
 
+@app.template_filter('safe_currency')
+def safe_currency_filter(val):
+    if val is None:
+        return "0"
+    if isinstance(val, (int, float)):
+        return "{:,.0f}".format(val)
+    try:
+        # Try cleaning and casting string variables reactively
+        cleaned = str(val).replace('.', '').replace(',', '').replace('đ', '').replace('₫', '').replace('VND', '').strip()
+        return "{:,.0f}".format(float(cleaned) if '.' in str(val) else int(cleaned))
+    except (ValueError, TypeError):
+        return str(val) # Return raw if it's genuinely a text note, or "0"
+
 @app.route("/api/v1/jobs/status/<job_id>", methods=["GET"])
 def get_job_status(job_id):
     status = job_manager.get_job(job_id)
@@ -208,6 +251,7 @@ class Config:
     HOST:  str  = os.getenv("HOST",  "0.0.0.0")
     PORT:  int  = int(os.getenv("PORT", 5000))
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+
 
     UPLOAD_DIR:  Path = BASE_DIR / "uploads"
     TEMP_DIR:    Path = BASE_DIR / "tmp_normalized"
@@ -498,11 +542,12 @@ class ModelManager:
                 self._load_components(log)
                 self._ready = True
                 log.info("  ... ModelManager: Base components (OCR + Engine) loaded.")
-                if not GEMINI_ENABLED:
-                    log.info("   GEMINI_ENABLED=False -> Pre-warming local models...")
-                    self._ensure_header()
-                    self._ensure_table()
-                    self._ensure_footer()
+                
+                # Pre-warm local models eagerly for instant fallback and to prevent runtime CPU freezing
+                log.info("   Pre-warming local models for instant fallback...")
+                self._ensure_header()
+                self._ensure_table()
+                self._ensure_footer()
             except Exception as exc:
                 self._init_error = str(exc)
                 log.error("ModelManager.load() FAILED", exc_info=True)
@@ -737,7 +782,7 @@ def is_noise_item(item: dict) -> bool:
     def is_pos(v):
         try:
             return float(str(v).replace('.', '').replace(',', '')) > 0
-        except:
+        except Exception:
             return False
 
     has_value = is_pos(qty) or is_pos(price) or is_pos(total)
@@ -771,7 +816,7 @@ def is_noise_item(item: dict) -> bool:
     try:
         if 1990 <= int(float(str(qty))) <= 2099 and len(name) == 0:
             return True
-    except:
+    except Exception:
         pass
 
     # Rule 7: Single word, no value, not a real product name
@@ -788,7 +833,7 @@ def is_noise_item(item: dict) -> bool:
             # Small quantities with no name = noise (not a real item row)
             if qty_int < 100:
                 return True
-        except:
+        except Exception:
             pass
 
     # Rule 9: Single Vietnamese word that appears in signature areas
@@ -1761,7 +1806,7 @@ def _reconstruct_items_from_labels(labels: List[str], confs: List[float], words:
         except ValueError:
             try:
                 return float(cleaned)
-            except:
+            except Exception:
                 return 0
 
     for i, (label, conf, text) in enumerate(zip(labels, confs, words)):
@@ -1959,7 +2004,7 @@ def _should_force_vat_zero(invoice: dict) -> bool:
         import re
         vat_digits = re.sub(r'[^\d]', '', str(vat_val))
         vat_numeric = int(vat_digits) if vat_digits else 0
-    except:
+    except Exception:
         vat_numeric = 0
 
     return (vat_conf < 0.5 and
@@ -2000,8 +2045,8 @@ def _math_validate_items(items: list) -> None:
                     print(f"[MATH_WARN] {i}: '{name[:30]}' "
                           f"math_inconsist: {qty}*{price}-{disc}={expected} "
                           f"!= total={total} (ratio={ratio:.2f})")
-        except Exception as e:
-            print(f"[MATH_WARN] Error validating item {i}: {e}")
+        except Exception:
+            print(f"[MATH_WARN] Error validating item {i}")
 
 
 def _normalize_sw_items(sw_items: list) -> list:
@@ -2384,7 +2429,7 @@ def stage4_postprocess(
             try:
                 if abs(int(str(field_val).replace('.','').replace(',','')) - numeric) < 10:
                     return True  # It's a money amount, not a tax code
-            except:
+            except Exception:
                 pass
         return False
 
@@ -2590,7 +2635,7 @@ def stage5_format(serialized: Dict, filename: str, elapsed_ms: float, validation
                     raw_val = field_obj.get("value", 0)
                     normalized = _normalize_amount(raw_val)
                     if normalized is not None:
-                        field_obj["value"] = normalized
+                        field_obj["value"] = format_vnd(normalized)
                 else:
                     normalized = _normalize_amount(field_obj)
                     if normalized is not None:
@@ -2648,7 +2693,115 @@ def stage5_format(serialized: Dict, filename: str, elapsed_ms: float, validation
         else:
             final["status"] = "ok"
 
+    # Final step: flatten all fields for UI/JSON output (Fix confidence leak)
+    # 1. Extract confidences before they are lost (Prompt #3)
+    _fconf = {}
+    for sec in ["invoice", "seller", "buyer"]:
+        if sec in final and isinstance(final[sec], dict):
+            _fconf[sec] = {k: v.get("confidence", 1.0) if isinstance(v, dict) else 1.0 
+                           for k, v in final[sec].items()}
+    final["_field_confidences"] = _fconf
+
+    # 2. Generate warnings based on Rule 4 mapping (Prompt #3 & UI Fix)
+    name_map = {
+        "invoice_date":    "Ngày phát hành", "invoice_type":    "Loại hóa đơn",
+        "seller_name":     "Tên người bán",  "seller_tax_code": "MST người bán",
+        "buyer_name":      "Tên người mua",  "buyer_tax_code":  "MST người mua",
+        "total_amount":    "Tổng thanh toán", "tax_amount":      "Thuế VAT",
+        "net_amount":      "Tiền hàng",      "invoice_number":  "Số hóa đơn",
+        "invoice_series":  "Ký hiệu",
+    }
+    mapping = [
+        ("invoice", "date",         "invoice_date"),
+        ("invoice", "type",         "invoice_type"),
+        ("seller",  "name",         "seller_name"),
+        ("seller",  "tax_code",     "seller_tax_code"),
+        ("buyer",   "name",         "buyer_name"),
+        ("buyer",   "tax_code",     "buyer_tax_code"),
+        ("invoice", "total_amount", "total_amount"),
+        ("invoice", "vat_amount",   "tax_amount"),
+        ("invoice", "subtotal",     "net_amount"),
+        ("invoice", "number",       "invoice_number"),
+        ("invoice", "series",       "invoice_series"),
+    ]
+    _field_warnings = {}
+    _low_conf_count = 0
+    for section, int_key, ui_key in mapping:
+        conf = _fconf.get(section, {}).get(int_key, 1.0)
+        if conf < 0.85:
+            _low_conf_count += 1
+            _field_warnings[ui_key] = name_map[ui_key]
+    final["_field_warnings"] = _field_warnings
+    final["_low_conf_count"] = _low_conf_count
+
+    # 3. Flatten fields
+    for section in ["invoice", "seller", "buyer"]:
+        if section in final and isinstance(final[section], dict):
+            final[section] = {k: extract_field_value(v) for k, v in final[section].items()}
+    if "items" in final and isinstance(final["items"], list):
+        final["items"] = [
+            {k: extract_field_value(v) for k, v in it.items()} if isinstance(it, dict) else it
+            for it in final["items"]
+        ]
+
     return final
+
+
+def _merge_fragmented_items(items: list) -> list:
+    """
+    BUG 3: Merge rows that were split by accidental newlines/bad OCR alignment.
+    Rules:
+    - Group consecutive rows where quantity is 0 or confidence < 0 into the nearest
+      sibling row that has valid quantity and unit_price.
+    - Merge name strings.
+    - Recompute subtotal.
+    """
+    if not items:
+        return []
+    
+    merged = []
+    curr = None
+    
+    for item in items:
+        qty_obj = item.get("quantity", {})
+        qty_val = qty_obj.get("value", 0) or 0
+        qty_conf = qty_obj.get("confidence", 0)
+        
+        # Determine if this row is a "fragment" (no valid qty or low confidence)
+        is_fragment = (qty_val == 0 or qty_conf < 0)
+        
+        if not is_fragment:
+            # This is a base row
+            if curr:
+                merged.append(curr)
+            curr = item
+        else:
+            # This is a fragment row, merge into current base row if exists
+            if curr:
+                # Merge names
+                curr_name = curr.get("name", {}).get("value", "")
+                frag_name = item.get("name", {}).get("value", "")
+                if frag_name:
+                    curr["name"]["value"] = (curr_name + " " + frag_name).strip()
+                
+                # Merge total if current has 0
+                if (curr.get("total", {}).get("value", 0) or 0) == 0:
+                    curr["total"]["value"] = item.get("total", {}).get("value", 0)
+            else:
+                # No base row yet, keep as is for now
+                merged.append(item)
+    
+    if curr:
+        merged.append(curr)
+        
+    # Recompute subtotals for each merged item
+    for item in merged:
+        q = item.get("quantity", {}).get("value", 0) or 0
+        p = item.get("unit_price", {}).get("value", 0) or 0
+        if q > 0 and p > 0:
+            item.setdefault("total", {})["value"] = round(q * p, 2)
+            
+    return merged
 
 
 #                                                                                                                                                                                                       
@@ -2728,40 +2881,46 @@ def run_full_pipeline(
         if raw_result is None:
             log.info("Executing local LayoutLMv3 pipeline (Stage 2, 3, 4)...")
 
-            #        Stage 2: OCR (Only if LayoutLMv3 fallback required)                
-            t = time.monotonic()
-            _, words, bboxes = stage2_ocr(mm, img_bgr, w, h, temp_dir, uid, log)
-            met.record_stage("2_ocr", (time.monotonic() - t) * 1000)
-            log.info("Stage 2   ... ocr  words=%d", len(words))
+            with inference_lock:
+                safe_img_bgr = img_bgr.copy()
+                #        Stage 2: OCR (Only if LayoutLMv3 fallback required)                
+                t = time.monotonic()
+                _, words, bboxes = stage2_ocr(mm, safe_img_bgr, w, h, temp_dir, uid, log)
+                met.record_stage("2_ocr", (time.monotonic() - t) * 1000)
+                log.info("Stage 2   ... ocr  words=%d", len(words))
 
-            #        Stage 3: Inference                                                                                                                   
-            t = time.monotonic()
-            (header_labels, header_confs,
-             table_labels,  table_confs,
-             footer_labels, footer_confs,
-             sw_items) = stage3_inference(mm, img_bgr, words, bboxes, log)
-            met.record_stage("3_inference", (time.monotonic() - t) * 1000)
-            
-            log.debug(
-                "  Stage 3   ... inference  header_non_O=%d  table_non_O=%d  footer_non_O=%d",
-                sum(1 for l in header_labels if l != "O"),
-                sum(1 for l in table_labels  if l != "O"),
-                sum(1 for l in footer_labels if l != "O"),
-            )
+                #        Stage 3: Inference                                                                                                                   
+                t = time.monotonic()
+                (header_labels, header_confs,
+                 table_labels,  table_confs,
+                 footer_labels, footer_confs,
+                 sw_items) = stage3_inference(mm, safe_img_bgr, words, bboxes, log)
+                met.record_stage("3_inference", (time.monotonic() - t) * 1000)
+                
+                log.debug(
+                    "  Stage 3   ... inference  header_non_O=%d  table_non_O=%d  footer_non_O=%d",
+                    sum(1 for l in header_labels if l != "O"),
+                    sum(1 for l in table_labels  if l != "O"),
+                    sum(1 for l in footer_labels if l != "O"),
+                )
 
-            #        Stage 4: Post-processing                                                                                              
-            t = time.monotonic()
-            raw_result = stage4_postprocess(
-                mm, words, bboxes,
-                header_labels, header_confs,
-                table_labels,  table_confs,
-                footer_labels, footer_confs,
-                log,
-                sw_items=sw_items,
-            )
-            met.record_stage("4_postprocess", (time.monotonic() - t) * 1000)
-            log.info("Stage 4   ... postprocess done")
+                #        Stage 4: Post-processing                                                                                              
+                t = time.monotonic()
+                raw_result = stage4_postprocess(
+                    mm, words, bboxes,
+                    header_labels, header_confs,
+                    table_labels,  table_confs,
+                    footer_labels, footer_confs,
+                    log,
+                    sw_items=sw_items,
+                )
+                met.record_stage("4_postprocess", (time.monotonic() - t) * 1000)
+                log.info("Stage 4   ... postprocess done")
         #        end stage 3+4                                                                                                                                                          
+
+        # BUG 3: Merge fragmented line items before final serialization
+        if raw_result and "items" in raw_result:
+            raw_result["items"] = _merge_fragmented_items(raw_result["items"])
 
         #        Stage 5: Final Serialization & Validation                                                                   
         # Canonical entry point for consistent JSON structure (Bug 3 fixed)
@@ -2769,6 +2928,12 @@ def run_full_pipeline(
         # 1. Base Serialization (Financial logic + Base Confidence)
         final = serialize_invoice_result(raw_result)
         
+        # BUG 2: Attach engine info and warnings
+        extraction_engine = "gemini" if GEMINI_ENABLED and raw_result and "gemini" in str(raw_result).lower() else "layoutlmv3_fallback"
+        final["extraction_engine"] = extraction_engine
+        if extraction_engine == "layoutlmv3_fallback":
+            final.setdefault("warnings", []).append("Gemini quota exhausted; result produced by local LayoutLMv3 model")
+
         # 2. Business Rule Validation
         validator  = InvoiceValidator(
             vat_tolerance  = Config.VAT_TOLERANCE,
@@ -2776,16 +2941,21 @@ def run_full_pipeline(
         )
         validation = validator.validate_all(final)
 
+        # BUG 3: Strict Total Validation Pass
+        subtotal   = final["invoice"].get("subtotal", {}).get("value", 0)
+        vat_amount = final["invoice"].get("vat_amount", {}).get("value", 0)
+        total_amt  = final["invoice"].get("total_amount", {}).get("value", 0)
+        delta      = abs((subtotal + vat_amount) - total_amt)
+        
+        if delta > 1.0: # Allow 1.0 for rounding
+            err_msg = f"Total sum mismatch: subtotal({subtotal}) + vat_amount({vat_amount}) = {subtotal+vat_amount}, but total_amount={total_amt}"
+            validation["errors"].append(err_msg)
+            final["status"] = "failed"
+
         # 3. Merge Orchestrator findings (conflicts from model merging)
-        # raw_result here is the output of Gemini or Stage 4 (merged raw)
         conflicts = (raw_result or {}).get("_conflicts") or []
         for conflict in conflicts:
             validation["warnings"].append(conflict)
-
-        if validation["errors"]:
-            log.warning("Validation errors: %s", validation["errors"])
-        if validation["warnings"]:
-            log.debug("Validation warnings: %s", validation["warnings"])
 
         # 4. Attach validation results to schema
         final["_validation"] = validation
@@ -2925,6 +3095,15 @@ def api_extract():
         # PERSISTENCE: Save result to JSON folder
         _save_extraction_json(file.filename, result)
         
+        # BUG 3: Strict 422 for failed validation
+        if result.get("status") == "failed":
+            return jsonify({
+                "success":    False,
+                "error":      "Strict validation failed (total mismatch)",
+                "data":       result,
+                "request_id": uid
+            }), 422
+
         return jsonify({
             "success":    True,
             "data":       result,
@@ -2957,24 +3136,19 @@ def update_result():
         with open(save_path, "r", encoding="utf-8") as f:
             result = json.load(f)
             
-        # Update flat fields (this assumes a certain structure in the saved JSON)
-        # For simplicity, we update the top-level result or the 'invoice' section
-        if "invoice" in result:
-            # Mapping from UI names to internal schema
-            mapping = {
-                "invoice_type": "type",
-                "invoice_date": "date",
-                "vendor_name": ["seller", "name"],
-                "vendor_tax_id": ["seller", "tax_code"],
-                "buyer_name": ["buyer", "name"],
-                "total_amount": "total_amount",
-                "net_amount": "subtotal",
-                "vat_amount": "vat_amount"
-            }
-            # ... (Full logic to update nested dict based on UI fields)
+        # Update fields
+        if "invoice" not in result: result["invoice"] = {}
+        if "seller" not in result: result["seller"] = {}
+        if "buyer" not in result: result["buyer"] = {}
         
-        # Or even simpler: just save the data as-is if the UI sends the whole object
-        # Since we want to be "Senior", let's handle the items update specifically
+        if "invoice_type" in data: result["invoice"]["type"] = data["invoice_type"]
+        if "invoice_date" in data: result["invoice"]["date"] = data["invoice_date"]
+        if "invoice_number" in data: result["invoice"]["number"] = data["invoice_number"]
+        if "seller_name" in data: result["seller"]["name"] = data["seller_name"]
+        if "seller_tax_code" in data: result["seller"]["tax_code"] = data["seller_tax_code"]
+        if "buyer_name" in data: result["buyer"]["name"] = data["buyer_name"]
+        if "buyer_tax_code" in data: result["buyer"]["tax_code"] = data["buyer_tax_code"]
+
         if "line_items" in data:
             result["items"] = data["line_items"]
             
@@ -3080,11 +3254,17 @@ def extract_async():
 @app.route("/api/v1/jobs/<job_id>", methods=["GET"])
 def get_job(job_id: str):
     job = job_queue.get_job(job_id)
-    if job is None:
-        return jsonify({
-            "error": f"Job '{job_id}' not found or expired (TTL: {Config.JOB_TTL_SECONDS}s)."
-        }), 404
-    return jsonify(job.to_dict())
+    if job is not None:
+        return jsonify(job.to_dict())
+    
+    # Also check job_manager for ZIP jobs
+    job_mgr_job = job_manager.get_job(job_id)
+    if job_mgr_job is not None:
+        return jsonify(job_mgr_job)
+
+    return jsonify({
+        "error": f"Job '{job_id}' not found or expired (TTL: {Config.JOB_TTL_SECONDS}s)."
+    }), 404
 
 
 @app.route("/api/v1/health")
@@ -3128,47 +3308,211 @@ def get_metrics():
 def _flatten_result(pipeline_result: dict, filename: str) -> dict:
     """Chuy   n output run_full_pipeline() th nh dict ph   ng cho template."""
     def _val(obj, key, default=None):
-        field = (obj or {}).get(key, {})
-        if isinstance(field, dict):
-            return field.get("value", default)
-        return field if field is not None else default
+        val = extract_field_value((obj or {}).get(key))
+        return val if val is not None else default
 
     invoice = pipeline_result.get("invoice") or {}
     seller  = pipeline_result.get("seller")  or {}
     buyer   = pipeline_result.get("buyer")   or {}
     items   = pipeline_result.get("items")   or []
 
+    # Prompt #3: Field warnings and low-conf count (Centralized in stage5_format)
+    field_warnings = pipeline_result.get("_field_warnings", {})
+    low_conf_count = pipeline_result.get("_low_conf_count", 0)
+
     return {
         "filename":      filename,
+        "raw_json":      json.dumps(pipeline_result, ensure_ascii=False, indent=2),
+        "low_conf_count": low_conf_count,
+        "field_warnings": field_warnings,
         "invoice_type":  invoice.get("type", "BAN_HANG"),
         "invoice_date":  _val(invoice, "date", ""),
+        "invoice_number":_val(invoice, "number", ""),
         "vendor_name":   _val(seller, "name", "Kh ng x c      nh"),
         "buyer_name":    _val(buyer,  "name", "Kh ng x c      nh"),
         "vendor_tax_id": _val(seller, "tax_code", ""),
-        "net_amount":    float(_val(invoice, "subtotal",     0) or 0),
-        "vat_amount":    float(_val(invoice, "vat_amount",   0) or 0),
-        "total_amount":  float(_val(invoice, "total_amount", 0) or 0),
+        "buyer_tax_id":  _val(buyer, "tax_code", ""),
+        "net_amount":    _safe_cast_to_numeric_v2(_val(invoice, "subtotal")),
+        "vat_amount":    _safe_cast_to_numeric_v2(_val(invoice, "vat_amount")),
+        "total_amount":  _safe_cast_to_numeric_v2(_val(invoice, "total_amount")),
         "status":        pipeline_result.get("status", "ok"),
         "confidence":    round(float(pipeline_result.get("document_confidence", 0) or 0), 3),
-        "line_items":    items,   # "items" conflicts with dict.items() in Jinja2
+        "line_items": [
+            {k: _safe_cast_to_numeric_v2(extract_field_value(v)) if k in ("unit_price", "quantity", "total", "amount") else extract_field_value(v) for k, v in item.items()} if isinstance(item, dict) else item
+            for item in items
+        ],   # "items" conflicts with dict.items() in Jinja2
         "image_url":     f"/static/temp_previews/{filename}",
     }
 
 
+def _safe_cast_to_numeric(val, default=0):
+    """
+    Safely cast string representations of money (with separators, symbols) into numeric types.
+    Handles '1.080.000 ₫', '1,000,000 VND', '', None gracefully.
+    """
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return val
+    if isinstance(val, str):
+        # Clean string: remove dots, commas, spaces, and currency symbols
+        cleaned = val.replace('.', '').replace(',', '').replace('đ', '').replace('₫', '').replace('VND', '').strip()
+        if not cleaned:
+            return default
+        try:
+            return float(cleaned) if '.' in val or ',' in val else int(cleaned)
+        except ValueError:
+            return default
+    return default
+
+
+def _safe_cast_to_numeric_v2(val, default=0):
+    """More defensive numeric coercion for dashboard rendering."""
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return int(val)
+    if isinstance(val, (int, float)):
+        return val
+    if isinstance(val, str):
+        raw = val.strip()
+        if not raw or raw.lower() in {"none", "null", "nan", "n/a"}:
+            return default
+
+        cleaned = (
+            raw.replace("VND", "")
+               .replace("vnd", "")
+               .replace("Ä‘", "")
+               .replace("đ", "")
+               .replace("â‚«", "")
+               .replace("₫", "")
+               .replace(" ", "")
+        )
+        if not cleaned:
+            return default
+
+        if "." in cleaned and "," in cleaned:
+            if cleaned.rfind(",") > cleaned.rfind("."):
+                cleaned = cleaned.replace(".", "").replace(",", ".")
+            else:
+                cleaned = cleaned.replace(",", "")
+        elif "," in cleaned:
+            comma_parts = cleaned.split(",")
+            if len(comma_parts) == 2 and len(comma_parts[1]) <= 2:
+                cleaned = cleaned.replace(",", ".")
+            else:
+                cleaned = cleaned.replace(",", "")
+        elif "." in cleaned:
+            dot_parts = cleaned.split(".")
+            if len(dot_parts) >= 2 and all(part.isdigit() for part in dot_parts) and all(len(part) == 3 for part in dot_parts[1:]):
+                cleaned = "".join(dot_parts)
+
+        try:
+            numeric = float(cleaned)
+            if numeric.is_integer():
+                return int(numeric)
+            return numeric
+        except ValueError:
+            return default
+    return default
+
+
+@app.template_filter("safe_currency")
+def safe_currency_filter_v2(val):
+    """Render VND-like amounts safely for dashboard templates."""
+    try:
+        numeric_value = _safe_cast_to_numeric_v2(val, default=0)
+        return f"{int(round(float(numeric_value))):,}".replace(",", ".")
+    except (ValueError, TypeError, OverflowError):
+        if val in (None, "", "None", "null"):
+            return "0"
+        return str(val)
+
+
+def _dashboard_default_summary() -> dict:
+    return {
+        "count_total": 0,
+        "count_gtgt": 0,
+        "count_banhang": 0,
+        "grand_total": 0,
+        "total_vat": 0,
+        "chart_timeline": [],
+    }
+
+
+def _normalize_dashboard_item(item: Any) -> dict:
+    item = item if isinstance(item, dict) else {}
+    return {
+        "filename": item.get("filename") or "",
+        "raw_json": item.get("raw_json") or "{}",
+        "low_conf_count": int(_safe_cast_to_numeric_v2(item.get("low_conf_count"), default=0) or 0),
+        "field_warnings": item.get("field_warnings") if isinstance(item.get("field_warnings"), dict) else {},
+        "invoice_type": item.get("invoice_type") or "BAN_HANG",
+        "invoice_date": item.get("invoice_date") or "",
+        "invoice_number": item.get("invoice_number") or "",
+        "vendor_name": item.get("vendor_name") or "Khong xac dinh",
+        "buyer_name": item.get("buyer_name") or "Khong xac dinh",
+        "vendor_tax_id": item.get("vendor_tax_id") or "",
+        "buyer_tax_id": item.get("buyer_tax_id") or "",
+        "net_amount": _safe_cast_to_numeric_v2(item.get("net_amount"), default=0),
+        "vat_amount": _safe_cast_to_numeric_v2(item.get("vat_amount"), default=0),
+        "total_amount": _safe_cast_to_numeric_v2(item.get("total_amount"), default=0),
+        "status": item.get("status") or "ok",
+        "confidence": _safe_cast_to_numeric_v2(item.get("confidence"), default=0),
+        "line_items": item.get("line_items") if isinstance(item.get("line_items"), list) else [],
+        "image_url": item.get("image_url") or "",
+    }
+
+
+def _normalize_dashboard_results(results: Any) -> List[dict]:
+    if not isinstance(results, list):
+        return []
+    return [_normalize_dashboard_item(item) for item in results]
+
+
 def _aggregate_batch(results: list) -> dict:
-    """T   ng h   p th   ng k  cho Dashboard Chart.js."""
-    grand_total = sum(r.get("total_amount", 0) for r in results)
-    total_vat   = sum(r.get("vat_amount",   0) for r in results)
+    """Tống hợp thống kê cho Dashboard Chart.js an toàn."""
+    grand_total = 0
+    total_vat = 0
     timeline_map: dict = {}
+    
+    count_gtgt = 0
+    count_banhang = 0
+
     for r in results:
-        date = r.get("invoice_date") or "Unknown"
-        if not date or date in ("None", "null", ""):
-            date = "Unknown"
-        timeline_map[date] = timeline_map.get(date, 0) + r.get("total_amount", 0)
+        try:
+            # 1. Graceful isolated extraction per invoice
+            raw_total = r.get("total_amount", 0)
+            raw_vat = r.get("vat_amount", 0)
+            
+            # Sanitization
+            clean_total = _safe_cast_to_numeric_v2(raw_total)
+            clean_vat = _safe_cast_to_numeric_v2(raw_vat)
+            
+            # Aggregation
+            grand_total += clean_total
+            total_vat += clean_vat
+            
+            # Type classification
+            if r.get("invoice_type") == "GTGT":
+                count_gtgt += 1
+            else:
+                count_banhang += 1
+
+            # Timeline extraction
+            date = r.get("invoice_date") or "Unknown"
+            if not date or date in ("None", "null", ""):
+                date = "Unknown"
+            timeline_map[date] = timeline_map.get(date, 0) + clean_total
+            
+        except Exception as e:
+            # Localized isolation: log error but continue processing the rest of the batch
+            logger.warning(f"Failed to aggregate invoice {r.get('filename', 'Unknown')}: {e}")
+
     return {
         "count_total":   len(results),
-        "count_gtgt":    sum(1 for r in results if r.get("invoice_type") == "GTGT"),
-        "count_banhang": sum(1 for r in results if r.get("invoice_type") != "GTGT"),
+        "count_gtgt":    count_gtgt,
+        "count_banhang": count_banhang,
         "grand_total":   grand_total,
         "total_vat":     total_vat,
         "chart_timeline": [
@@ -3213,6 +3557,8 @@ def extract_multi():
             results.append(flat)
             logger.info("MULTI | %s -> status=%s  total=%.0f",
                         filename, flat["status"], flat["total_amount"])
+            # Task 2: Subtle delay between consecutive Gemini API dispatches
+            time.sleep(1.5)
         except ValidationError as ve:
             errors.append({"filename": filename, "error": str(ve)})
         except Exception as exc:
@@ -3260,79 +3606,80 @@ def upload_zip():
         except Exception:
             pass
 
-    results = []
-    errors  = []
-
+    # Read bytes BEFORE starting thread
     try:
-        with zipfile.ZipFile(zip_file, "r") as zf:
-            image_entries = [
-                name for name in zf.namelist()
-                if name.lower().endswith((".png", ".jpg", ".jpeg"))
-                and not name.startswith("__MACOSX")
-            ][:20]
-
-            if not image_entries:
-                job_manager.update_job(job_id, "status", "failed")
-                return jsonify({"error": "Kh ng t m th   y    nh (.png/.jpg/.jpeg) trong ZIP."}), 400
-
-            job_manager.update_job(job_id, "total", len(image_entries))
-            logger.info("[ZIP] %d    nh t   : %s", len(image_entries), zip_file.filename)
-
-            for entry in image_entries:
-                clean_name = Path(entry).name
-                if not clean_name:
-                    continue
-                
-                job_manager.update_job(job_id, "current_file", clean_name)
-                
-                try:
-                    img_bytes = zf.read(entry)
-                    # L  u    nh preview
-                    (PREVIEW_FOLDER / clean_name).write_bytes(img_bytes)
-                    # Ch   y pipeline y h   t /api/v1/extract
-                    pipeline_result = run_full_pipeline(
-                        image_bytes = img_bytes,
-                        filename    = clean_name,
-                        log         = logger,
-                        met         = metrics,
-                    )
-                    _save_extraction_json(clean_name, pipeline_result)
-                    flat = _flatten_result(pipeline_result, clean_name)
-                    results.append(flat)
-                    
-                    # Update progress
-                    current_status = job_manager.get_job(job_id)
-                    if current_status:
-                        job_manager.update_job(job_id, "processed", current_status["processed"] + 1)
-                    
-                    logger.info("[ZIP]   ... %s -> total=%.0f  status=%s",
-                                clean_name, flat["total_amount"], flat["status"])
-                except ValidationError as ve:
-                    errors.append(str(ve))
-                    logger.warning("[ZIP]         %s: %s", clean_name, ve)
-                except Exception as exc:
-                    errors.append(f"{clean_name}: {exc}")
-                    logger.error("[ZIP]     %s: %s", clean_name, exc, exc_info=True)
-
-    except zipfile.BadZipFile:
+        z_bytes = zip_file.read()
+    except Exception as e:
         job_manager.update_job(job_id, "status", "failed")
-        return jsonify({"error": "File kh ng ph   i      nh d   ng ZIP h   p l   ."}), 400
-    except Exception as exc:
-        job_manager.update_job(job_id, "status", "failed")
-        logger.error("[ZIP] System error: %s", exc, exc_info=True)
-        return jsonify({"error": f"L  --i h    th   ng: {exc}"}), 500
+        return jsonify({"error": f"Failed to read file: {e}"}), 400
 
-    job_manager.update_job(job_id, "status", "completed")
-    
-    if not results:
-        return jsonify({"error": "Kh ng tr ch xu   t        c k   t qu    n o.", "details": errors}), 400
+    def _process_zip(zip_data: bytes):
+        try:
+            results = []
+            errors  = []
+            from io import BytesIO
+            with zipfile.ZipFile(BytesIO(zip_data), "r") as zf:
+                image_entries = [
+                    name for name in zf.namelist()
+                    if name.lower().endswith((".png", ".jpg", ".jpeg"))
+                    and not name.startswith("__MACOSX")
+                ][:20]
 
-    summary = _aggregate_batch(results)
-    summary["errors"] = errors
-    logger.info("[ZIP] Ho n t   t: %d/%d    nh", len(results), len(image_entries))
+                if not image_entries:
+                    job_manager.update_job(job_id, "status", "failed")
+                    return
 
-    return render_template("dashboard.html", summary=summary, details=results)
+                job_manager.update_job(job_id, "total", len(image_entries))
+                
+                for entry in image_entries:
+                    clean_name = Path(entry).name
+                    if not clean_name: continue
+                    job_manager.update_job(job_id, "current_file", clean_name)
+                    
+                    try:
+                        img_bytes = zf.read(entry)
+                        pipeline_result = run_full_pipeline(img_bytes, clean_name, logger, metrics)
+                        _save_extraction_json(clean_name, pipeline_result)
+                        flat = _flatten_result(pipeline_result, clean_name)
+                        results.append(flat)
+                        
+                        curr = job_manager.get_job(job_id)
+                        job_manager.update_job(job_id, "processed", curr.get("processed", 0) + 1)
+                        # Task 2: Subtle delay between consecutive Gemini API dispatches
+                        time.sleep(1.5)
+                    except Exception:
+                        errors.append(f"{clean_name}: extraction error")
+            
+            job_manager.update_job(job_id, "status", "completed")
+            job_manager.update_job(job_id, "results", results)
+            job_manager.update_job(job_id, "errors", errors)
+            
+        except Exception as e:
+            logger.error(f"ZIP background task failed: {e}", exc_info=True)
+            job_manager.update_job(job_id, "status", "failed")
 
+    # Start the worker thread
+    threading.Thread(target=_process_zip, args=(z_bytes,), daemon=True).start()
+    return jsonify({"job_id": job_id, "status": "processing"})
+
+
+@app.route("/dashboard/<job_id>")
+def view_dashboard(job_id):
+    job = job_manager.get_job(job_id)
+    if not job or job.get("status") != "completed":
+        return "Job not found or not completed", 404
+
+    results = _normalize_dashboard_results(job.get("results", []))
+    summary = _dashboard_default_summary()
+    summary.update(_aggregate_batch(results))
+
+    return render_template(
+        "dashboard.html",
+        details=results,
+        summary=summary,
+        job_id=job_id,
+        errors=job.get("errors", []) if isinstance(job.get("errors"), list) else [],
+    )
 
 
 #                                                                                                                                                                                                       
@@ -3504,10 +3851,18 @@ if __name__ == "__main__":
 
     threading.Thread(target=_warmup_model, daemon=True).start()
 
-    app.run(
-        host         = Config.HOST,
-        port         = Config.PORT,
-        debug        = Config.DEBUG,
-        use_reloader = False,   #        MUST be False     reloader causes double model load
-        threaded     = True,
-    )
+    DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    PORT  = int(os.getenv("PORT", 5000))
+
+    if DEBUG:
+        print("\n[DEBUG MODE] Starting Flask server...")
+        app.run(host="0.0.0.0", port=PORT, debug=True, use_reloader=False)
+    else:
+        # BUG 4: Production-ready server (Waitress for Windows)
+        try:
+            from waitress import serve
+            print(f"\n[PROD MODE] Starting Waitress server on port {PORT}...")
+            serve(app, host="0.0.0.0", port=PORT, threads=8)
+        except ImportError:
+            print("\n[WARN] Waitress not installed. Falling back to Flask (NOT FOR PRODUCTION).")
+            app.run(host="0.0.0.0", port=PORT, threaded=True)

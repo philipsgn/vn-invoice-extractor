@@ -2,169 +2,88 @@
   "status": "success",
   "document_confidence": 0.9927,
   "seller": {
-    "name": {
-      "value": "CÔNG TY TNHH SẢN XUẤT VÀ KINH DOANH THƯC PHẨM SACH AN TOÀN",
-      "confidence": 0.9934
-    },
-    "tax_code": {
-      "value": "8064826702",
-      "confidence": 0.999
-    },
-    "address": {
-      "value": "Số 7 Lê Hồng Phong, Phường 4, Quận 5, TP. Hồ Chí Minh",
-      "confidence": 0.9998
-    },
-    "phone": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "bank_account": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "bank_name": {
-      "value": "",
-      "confidence": 0.0
-    },
-    "tax_authority_code": {
-      "value": "T92N/1201593",
-      "confidence": 0.9168
-    }
+    "name": "CÔNG TY TNHH SẢN XUẤT VÀ KINH DOANH THƯC PHẨM SACH AN TOÀN",
+    "tax_code": "8064826702",
+    "address": "Số 7 Lê Hồng Phong, Phường 4, Quận 5, TP. Hồ Chí Minh",
+    "phone": "",
+    "bank_account": "",
+    "bank_name": "",
+    "tax_authority_code": "T92N/1201593"
   },
   "buyer": {
-    "name": {
-      "value": "CÔNG TY TNIHI THƯƠNG MẠI VÀ PHÂN PHỐI HÀNG HOÁ TOÀN",
-      "confidence": 0.0
-    },
-    "tax_code": {
-      "value": "9603375850529",
-      "confidence": 0.9996
-    },
-    "address": {
-      "value": "7 Ngô Gia Tư, Phường Phước Long B, TP. Thủ Đức, TP. Hồ Chí Minh",
-      "confidence": 0.9999
-    },
-    "full_name": {
-      "value": "(Buyer)",
-      "confidence": 0.0
-    }
+    "name": "CÔNG TY TNIHI THƯƠNG MẠI VÀ PHÂN PHỐI HÀNG HOÁ TOÀN",
+    "tax_code": "9603375850529",
+    "address": "7 Ngô Gia Tư, Phường Phước Long B, TP. Thủ Đức, TP. Hồ Chí Minh",
+    "full_name": "(Buyer)"
   },
   "items": [
     {
-      "name": {
-        "value": "",
-        "confidence": 0.0
-      },
-      "unit": {
-        "value": "7.206.683",
-        "confidence": 0.9249
-      },
-      "quantity": {
-        "value": 14.0,
-        "confidence": 1.0
-      },
-      "unit_price": {
-        "value": 7206683.0,
-        "confidence": 0.7623
-      },
-      "total": {
-        "value": 100893562.0,
-        "confidence": 0.9529
-      },
-      "discount": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "line_tax": {
-        "value": 10089356.0,
-        "confidence": 1.0
-      },
-      "row_total": {
-        "value": 110982918.0,
-        "confidence": 0.9999
-      },
+      "name": "Màn hình LG 27 inch IPS",
+      "unit": "7.206.683",
+      "quantity": 14.0,
+      "unit_price": 7206683.0,
+      "total": 100893562.0,
+      "discount": 0.0,
+      "line_tax": 10089356.0,
+      "row_total": 110982918.0,
       "vat_rate": "10"
-    },
-    {
-      "name": {
-        "value": "Màn hình LG 27 inch IPS",
-        "confidence": 1.0
-      },
-      "unit": {
-        "value": "7.206.683",
-        "confidence": 0.6
-      },
-      "quantity": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "unit_price": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "discount": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "line_tax": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "row_total": {
-        "value": 0.0,
-        "confidence": 0.0
-      },
-      "vat_rate": "0"
     }
   ],
   "invoice": {
-    "type": {
-      "value": "HÓA ĐƠN GIÁ TRI GIA TĂNG Mẫu số (Form): 01GTKT0/002",
-      "confidence": 0.9997
-    },
-    "symbol": {
-      "value": "KP/620",
-      "confidence": 0.9995
-    },
-    "number": {
-      "value": "7004722",
-      "confidence": 0.9991
-    },
-    "date": {
-      "value": "{'value': 'Ngày 08 tháng 09 năm 2022', 'confidence': 0.9996}",
-      "confidence": 0.9996
-    },
-    "payment_method": {
-      "value": ": Chuyên khoản",
-      "confidence": 0.9993
-    },
-    "currency": {
-      "value": "VND",
-      "confidence": 0.0
-    },
+    "type": "HÓA ĐƠN GIÁ TRI GIA TĂNG Mẫu số (Form): 01GTKT0/002",
+    "symbol": "KP/620",
+    "number": "7004722",
+    "date": "Ngày 08 tháng 09 năm 2022",
+    "payment_method": ": Chuyên khoản",
+    "currency": "VND",
     "vat_rate": "10",
-    "subtotal": {
-      "value": 118378736.0,
-      "confidence": 0.9999
-    },
-    "vat_amount": {
-      "value": 11837873.0,
-      "confidence": 1.0
-    },
-    "total_amount": {
-      "value": 130216610.0,
-      "confidence": 0.9851
-    },
+    "subtotal": "118.378.736 ₫",
+    "vat_amount": "11.837.873 ₫",
+    "total_amount": "130.216.610 ₫",
     "vat_breakdown": []
   },
   "_validation": {
     "errors": [],
     "warnings": []
   },
-  "_saved_at": "2026-05-15T12:57:35.660583",
+  "extraction_engine": "layoutlmv3_fallback",
+  "warnings": [
+    "Gemini quota exhausted; result produced by local LayoutLMv3 model"
+  ],
+  "_field_confidences": {
+    "invoice": {
+      "type": 0.9997,
+      "symbol": 0.9995,
+      "number": 0.9991,
+      "date": 0.9996,
+      "payment_method": 0.9993,
+      "currency": 0.0,
+      "vat_rate": 1.0,
+      "subtotal": 0.9999,
+      "vat_amount": 1.0,
+      "total_amount": 0.9851,
+      "vat_breakdown": 1.0
+    },
+    "seller": {
+      "name": 0.9934,
+      "tax_code": 0.999,
+      "address": 0.9998,
+      "phone": 0.0,
+      "bank_account": 0.0,
+      "bank_name": 0.0,
+      "tax_authority_code": 0.9168
+    },
+    "buyer": {
+      "name": 0.0,
+      "tax_code": 0.9996,
+      "address": 0.9999,
+      "full_name": 0.0
+    }
+  },
+  "_field_warnings": {
+    "buyer_name": "Tên người mua"
+  },
+  "_low_conf_count": 1,
+  "_saved_at": "2026-05-17T12:37:15.516276",
   "_filename": "norm_invoice_004.png"
 }
