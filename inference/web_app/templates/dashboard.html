@@ -32,6 +32,32 @@
             </a>
         </div>
 
+        <div class="flex justify-end gap-3 mb-6 flex-wrap">
+            <a href="/api/v1/jobs/{{ job_id }}/export/csv" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-3 rounded-2xl font-semibold shadow-sm transition-all">
+                Export CSV
+            </a>
+            <a href="/api/v1/jobs/{{ job_id }}/export/excel" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-2xl font-semibold shadow-sm transition-all">
+                Export Excel
+            </a>
+        </div>
+
+        {% set audit_overview = summary.audit_overview|default({}, true) %}
+        <div class="mb-8 rounded-[28px] border px-6 py-5 shadow-sm {{ 'border-emerald-200 bg-emerald-50 text-emerald-800' if audit_overview.is_valid else 'border-amber-200 bg-amber-50 text-amber-800' }}">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <div class="text-lg font-bold">
+                        {{ '🛡️ Invoice Audited & Verified' if audit_overview.is_valid else '🚩 Calculation Discrepancy Detected' }}
+                    </div>
+                    <div class="text-sm mt-1 opacity-90">
+                        {{ audit_overview.verified_invoices|default(0, true) }} verified / {{ audit_overview.flagged_invoices|default(0, true) }} flagged across {{ audit_overview.total_invoices|default(details|length, true) }} invoice(s)
+                    </div>
+                </div>
+                <div class="text-sm font-semibold">
+                    {{ audit_overview.message|default('Invoice auditing summary unavailable.', true) }}
+                </div>
+            </div>
+        </div>
+
         <!-- Stats Grid -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
             <div class="glass-card p-8 rounded-[32px] border-l-8 border-emerald-500 shadow-sm">
@@ -146,7 +172,10 @@
                     <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2" stroke-linecap="round"></path></svg>
                     </button>
+
                 </div>
+
+                <div id="m_audit_banner" class="mb-6 rounded-2xl px-4 py-3 text-sm font-semibold border"></div>
 
                 <div class="space-y-5">
                     <div>
@@ -196,6 +225,27 @@
                     <button onclick="saveChanges()" class="w-full bg-slate-900 text-white font-bold py-5 rounded-2xl hover:bg-black transition shadow-xl mt-6">
                         XÁC NHẬN & LƯU
                     </button>
+                    <div class="pt-6 border-t border-slate-100">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Line Item Audit</h3>
+                            <span class="text-xs text-slate-400">Fields below 0.85 confidence are highlighted</span>
+                        </div>
+                        <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-widest">
+                                    <tr>
+                                        <th class="px-3 py-3 text-left">No.</th>
+                                        <th class="px-3 py-3 text-left">Item</th>
+                                        <th class="px-3 py-3 text-left">Unit</th>
+                                        <th class="px-3 py-3 text-right">Qty</th>
+                                        <th class="px-3 py-3 text-right">Unit Price</th>
+                                        <th class="px-3 py-3 text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="m_line_items_body" class="divide-y divide-slate-100 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -205,6 +255,47 @@
         // Dữ liệu từ Backend
         const rawData = {{ details | default([], true) | tojson }};
         let currentIndex = -1;
+
+        function confidenceCellClasses(confidence, align = 'left') {
+            const base = `px-3 py-3 ${align === 'right' ? 'text-right' : 'text-left'} border-l-2 `;
+            if ((confidence ?? 1) < 0.85) {
+                return base + 'bg-amber-50 text-amber-700 border-amber-400';
+            }
+            return base + 'bg-white text-slate-700 border-transparent';
+        }
+
+        function renderAuditBanner(item) {
+            const el = document.getElementById('m_audit_banner');
+            const audit = item.audit_results || {};
+            const isValid = !!audit.is_valid;
+            el.className = `mb-6 rounded-2xl px-4 py-3 text-sm font-semibold border ${isValid ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`;
+            el.textContent = `${isValid ? '🛡️ Invoice Audited & Verified' : '🚩 Calculation Discrepancy Detected'} - ${audit.message || 'Audit summary unavailable'}`;
+        }
+
+        function renderLineItems(item) {
+            const body = document.getElementById('m_line_items_body');
+            const rows = Array.isArray(item.line_items_audit) ? item.line_items_audit : [];
+
+            if (!rows.length) {
+                body.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-slate-400">No line items available for audit.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            body.innerHTML = rows.map((row, idx) => `
+                <tr class="${row.matched ? '' : 'bg-amber-50/40'}">
+                    <td class="px-3 py-3 text-left text-slate-500">${idx + 1}</td>
+                    <td class="${confidenceCellClasses(row.name?.confidence, 'left')}">${row.name?.value ?? '-'}</td>
+                    <td class="${confidenceCellClasses(row.unit?.confidence, 'left')}">${row.unit?.value ?? '-'}</td>
+                    <td class="${confidenceCellClasses(row.quantity?.confidence, 'right')}">${row.quantity?.value ?? 0}</td>
+                    <td class="${confidenceCellClasses(row.unit_price?.confidence, 'right')}">${row.unit_price?.value ?? 0}</td>
+                    <td class="${confidenceCellClasses(row.total?.confidence, 'right')}">${row.total?.value ?? 0}</td>
+                </tr>
+            `).join('');
+        }
 
         // --- Chart.js Config ---
         const ctxDonut = document.getElementById('donutChart');
@@ -258,6 +349,8 @@
             document.getElementById('m_net').value = item.net_amount ?? 0;
             document.getElementById('m_vat').value = item.vat_amount ?? 0;
             document.getElementById('m_total').value = item.total_amount ?? 0;
+            renderAuditBanner(item);
+            renderLineItems(item);
             
             document.getElementById('editModal').classList.remove('hidden');
         }

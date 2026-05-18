@@ -42,10 +42,12 @@ Endpoints:
 # 0.  STDLIB  IMPORTS
 #                                                                                                                                                                                                          
 import copy
+import csv
 import gc
 import json
 import logging
 import os
+from io import BytesIO, StringIO
 #        Load .env FIRST     before any os.environ.get() calls                         
 from pathlib import Path as _Path
 _ENV_FILE = _Path(__file__).parent / ".env"
@@ -84,7 +86,7 @@ torch.set_num_threads(2)
 torch.set_num_interop_threads(2)
 from transformers import LayoutLMv3ForTokenClassification, LayoutLMv3Processor
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, make_response, render_template, request, send_file
 
 #                                                                                                                                                                                                          
 # 2.  PROJECT  ROOT  ->  sys.path
@@ -661,6 +663,8 @@ class AsyncJobQueue:
             job.status = JobStatus.PROCESSING
             try:
                 job.result = run_full_pipeline(image_bytes, job.filename, logger, metrics)
+                if isinstance(job.result, dict):
+                    job.result["audit_results"] = reconcile_invoice_data(job.result)
                 job.status = JobStatus.DONE
             except Exception as exc:
                 job.error  = str(exc)
@@ -3267,6 +3271,143 @@ def get_job(job_id: str):
     }), 404
 
 
+def _invoice_rows_from_pipeline_result(job_id: str, filename: str, result: dict) -> List[dict]:
+    result = result if isinstance(result, dict) else {}
+    invoice = result.get("invoice") if isinstance(result.get("invoice"), dict) else {}
+    seller = result.get("seller") if isinstance(result.get("seller"), dict) else {}
+    items = result.get("items") if isinstance(result.get("items"), list) else []
+    audit = result.get("audit_results") if isinstance(result.get("audit_results"), dict) else {}
+
+    vendor_name = extract_field_value(seller.get("name")) or ""
+    vendor_tax_id = extract_field_value(seller.get("tax_code")) or ""
+    invoice_date = extract_field_value(invoice.get("date")) or ""
+    invoice_number = extract_field_value(invoice.get("number")) or ""
+    tax_amount = _safe_cast_to_numeric_v2(extract_field_value(invoice.get("vat_amount")), default=0)
+    grand_total = _safe_cast_to_numeric_v2(extract_field_value(invoice.get("total_amount")), default=0)
+    audit_message = audit.get("message", "")
+    audit_status = "Verified" if audit.get("is_valid") else "Flagged"
+
+    rows = []
+    source_items = items if items else [{}]
+    for idx, item in enumerate(source_items, start=1):
+        item = item if isinstance(item, dict) else {}
+        rows.append({
+            "Job ID": job_id,
+            "Invoice File": filename,
+            "Invoice Number": invoice_number,
+            "Invoice Date": invoice_date,
+            "Vendor": vendor_name,
+            "Tax ID": vendor_tax_id,
+            "No.": idx,
+            "Item Name": extract_field_value(item.get("name")) or "",
+            "Unit": extract_field_value(item.get("unit")) or "",
+            "Quantity": _safe_cast_to_numeric_v2(extract_field_value(item.get("quantity")), default=0),
+            "Unit Price": _safe_cast_to_numeric_v2(extract_field_value(item.get("unit_price")), default=0),
+            "Total": _safe_cast_to_numeric_v2(extract_field_value(item.get("total")) or extract_field_value(item.get("amount")), default=0),
+            "Tax": tax_amount,
+            "Grand Total": grand_total,
+            "Audit Status": audit_status,
+            "Audit Message": audit_message,
+        })
+    return rows
+
+
+def _invoice_rows_from_dashboard_result(job_id: str, item: dict) -> List[dict]:
+    item = item if isinstance(item, dict) else {}
+    audit = item.get("audit_results") if isinstance(item.get("audit_results"), dict) else {}
+    audit_status = "Verified" if audit.get("is_valid") else "Flagged"
+    audit_message = audit.get("message", "")
+    line_items = item.get("line_items") if isinstance(item.get("line_items"), list) else []
+
+    rows = []
+    source_items = line_items if line_items else [{}]
+    for idx, line_item in enumerate(source_items, start=1):
+        line_item = line_item if isinstance(line_item, dict) else {}
+        rows.append({
+            "Job ID": job_id,
+            "Invoice File": item.get("filename") or "",
+            "Invoice Number": item.get("invoice_number") or "",
+            "Invoice Date": item.get("invoice_date") or "",
+            "Vendor": item.get("vendor_name") or "",
+            "Tax ID": item.get("vendor_tax_id") or "",
+            "No.": idx,
+            "Item Name": line_item.get("name") or "",
+            "Unit": line_item.get("unit") or "",
+            "Quantity": _safe_cast_to_numeric_v2(line_item.get("quantity"), default=0),
+            "Unit Price": _safe_cast_to_numeric_v2(line_item.get("unit_price"), default=0),
+            "Total": _safe_cast_to_numeric_v2(line_item.get("total") or line_item.get("amount"), default=0),
+            "Tax": _safe_cast_to_numeric_v2(item.get("vat_amount"), default=0),
+            "Grand Total": _safe_cast_to_numeric_v2(item.get("total_amount"), default=0),
+            "Audit Status": audit_status,
+            "Audit Message": audit_message,
+        })
+    return rows
+
+
+def _collect_export_rows(job_id: str) -> List[dict]:
+    job = job_queue.get_job(job_id)
+    if job is not None:
+        if job.status != JobStatus.DONE or not isinstance(job.result, dict):
+            raise ValueError("Job is not completed yet.")
+        return _invoice_rows_from_pipeline_result(job_id, job.filename, job.result)
+
+    job_mgr_job = job_manager.get_job(job_id)
+    if job_mgr_job is not None:
+        if job_mgr_job.get("status") != "completed":
+            raise ValueError("Job is not completed yet.")
+        results = job_mgr_job.get("results") if isinstance(job_mgr_job.get("results"), list) else []
+        rows = []
+        for item in results:
+            rows.extend(_invoice_rows_from_dashboard_result(job_id, item))
+        return rows
+
+    raise KeyError(f"Job '{job_id}' not found.")
+
+
+@app.route("/api/v1/jobs/<job_id>/export/<format>", methods=["GET"])
+def export_job_data(job_id: str, format: str):
+    format = (format or "").strip().lower()
+    if format not in {"csv", "excel"}:
+        return jsonify({"error": "Unsupported export format. Use 'csv' or 'excel'."}), 400
+
+    try:
+        rows = _collect_export_rows(job_id)
+    except KeyError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
+
+    if not rows:
+        return jsonify({"error": "No rows available for export."}), 404
+
+    if format == "csv":
+        buffer = StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+        response = make_response(buffer.getvalue())
+        response.headers["Content-Type"] = "text/csv; charset=utf-8"
+        response.headers["Content-Disposition"] = f'attachment; filename="invoice_audit_{job_id}.csv"'
+        return response
+
+    try:
+        import pandas as pd
+    except ImportError:
+        return jsonify({"error": "Excel export requires pandas and openpyxl."}), 501
+
+    df = pd.DataFrame(rows)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Invoice Audit", index=False)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"invoice_audit_{job_id}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.route("/api/v1/health")
 def health():
     return jsonify({
@@ -3305,6 +3446,188 @@ def get_metrics():
 #                                                                                                                                                                                                       
 # UI     Multi-image/PDF Upload (kh ng dashboard)
 #                                                                                                                                                                                                       
+def reconcile_invoice_data(extracted_data: dict) -> dict:
+    """
+    Audit invoice arithmetic without mutating the core extraction schema.
+
+    Rules:
+    - Item total must equal quantity * unit_price within +/-100 VND.
+    - Grand total must equal sum(item totals) + tax_amount within +/-100 VND.
+    """
+    tolerance = 100
+    extracted_data = extracted_data if isinstance(extracted_data, dict) else {}
+
+    invoice = extracted_data.get("invoice") if isinstance(extracted_data.get("invoice"), dict) else {}
+    items = extracted_data.get("items") if isinstance(extracted_data.get("items"), list) else []
+
+    def _field_num(container: dict, key: str) -> float:
+        if not isinstance(container, dict):
+            return 0
+        return float(_safe_cast_to_numeric_v2(extract_field_value(container.get(key)), default=0) or 0)
+
+    items_audit = []
+    item_totals_sum = 0.0
+    line_item_ok = True
+
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            items_audit.append({
+                "index": idx,
+                "matched": False,
+                "expected_total": 0,
+                "reported_total": 0,
+                "difference": 0,
+                "message": "Invalid line item structure",
+            })
+            line_item_ok = False
+            continue
+
+        qty = _field_num(item, "quantity")
+        unit_price = _field_num(item, "unit_price")
+        reported_total = _field_num(item, "total") or _field_num(item, "amount")
+        expected_total = qty * unit_price
+        difference = abs(expected_total - reported_total)
+        matched = difference <= tolerance
+        item_totals_sum += reported_total
+        line_item_ok = line_item_ok and matched
+
+        items_audit.append({
+            "index": idx,
+            "matched": matched,
+            "expected_total": int(round(expected_total)),
+            "reported_total": int(round(reported_total)),
+            "difference": int(round(difference)),
+            "message": "Line item matched" if matched else "Line item total mismatch",
+        })
+
+    tax_amount = float(_safe_cast_to_numeric_v2(extract_field_value(invoice.get("vat_amount")), default=0) or 0)
+    grand_total = float(_safe_cast_to_numeric_v2(extract_field_value(invoice.get("total_amount")), default=0) or 0)
+    expected_grand_total = item_totals_sum + tax_amount
+    grand_total_difference = abs(expected_grand_total - grand_total)
+    grand_total_matched = grand_total_difference <= tolerance
+
+    discrepancy_detected = not (line_item_ok and grand_total_matched)
+    messages = []
+    if not line_item_ok:
+        messages.append("Line Items")
+    if not grand_total_matched:
+        messages.append("Grand Total")
+
+    return {
+        "is_valid": not discrepancy_detected,
+        "discrepancy_detected": discrepancy_detected,
+        "message": (
+            "All calculations match"
+            if not discrepancy_detected
+            else f"Discrepancy found in {' / '.join(messages)}"
+        ),
+        "items_audit": items_audit,
+        "summary": {
+            "items_total": int(round(item_totals_sum)),
+            "tax_amount": int(round(tax_amount)),
+            "expected_grand_total": int(round(expected_grand_total)),
+            "reported_grand_total": int(round(grand_total)),
+            "grand_total_difference": int(round(grand_total_difference)),
+            "tolerance_vnd": tolerance,
+            "grand_total_matched": grand_total_matched,
+        },
+    }
+
+
+def _build_line_item_audit_view(line_items: list, audit_results: dict, document_confidence: float = 1.0) -> list:
+    """
+    Build a UI-ready line item table with per-cell confidence for highlighting.
+    The extraction pipeline does not preserve raw item confidences in final output,
+    so this view-model derives accountant-facing confidence from completeness,
+    document confidence, and math audit results.
+    """
+    line_items = line_items if isinstance(line_items, list) else []
+    audit_map = {
+        entry.get("index"): entry
+        for entry in (audit_results or {}).get("items_audit", [])
+        if isinstance(entry, dict)
+    }
+    base_confidence = max(0.0, min(float(document_confidence or 0), 1.0)) or 0.92
+
+    def _text_conf(value):
+        return round(base_confidence if str(value or "").strip() else 0.0, 3)
+
+    def _num_conf(value):
+        numeric = _safe_cast_to_numeric_v2(value, default=0)
+        return round(base_confidence if numeric not in (None, "", 0) else 0.0, 3)
+
+    rows = []
+    for idx, item in enumerate(line_items):
+        item = item if isinstance(item, dict) else {}
+        item_audit = audit_map.get(idx, {})
+        matched = bool(item_audit.get("matched", True))
+        penalty = 0.30 if not matched else 0.0
+
+        name_val = item.get("name", "")
+        unit_val = item.get("unit", "")
+        qty_val = item.get("quantity", 0)
+        price_val = item.get("unit_price", 0)
+        total_val = item.get("total", item.get("amount", 0))
+
+        row = {
+            "index": idx,
+            "matched": matched,
+            "audit_message": item_audit.get("message", ""),
+            "name": {
+                "value": name_val or "-",
+                "confidence": max(0.0, round(_text_conf(name_val) - (penalty / 2), 3)),
+            },
+            "unit": {
+                "value": unit_val or "-",
+                "confidence": max(0.0, round(_text_conf(unit_val) - (penalty / 2), 3)),
+            },
+            "quantity": {
+                "value": qty_val or 0,
+                "confidence": max(0.0, round(_num_conf(qty_val) - penalty, 3)),
+            },
+            "unit_price": {
+                "value": price_val or 0,
+                "confidence": max(0.0, round(_num_conf(price_val) - penalty, 3)),
+            },
+            "total": {
+                "value": total_val or 0,
+                "confidence": max(0.0, round(_num_conf(total_val) - penalty, 3)),
+            },
+        }
+        rows.append(row)
+
+    return rows
+
+
+def _build_audit_overview(results: list) -> dict:
+    results = results if isinstance(results, list) else []
+    total = len(results)
+    verified = 0
+    flagged = 0
+
+    for result in results:
+        audit = result.get("audit_results") if isinstance(result, dict) else {}
+        if isinstance(audit, dict) and audit.get("is_valid"):
+            verified += 1
+        else:
+            flagged += 1
+
+    return {
+        "total_invoices": total,
+        "verified_invoices": verified,
+        "flagged_invoices": flagged,
+        "is_valid": flagged == 0,
+        "message": "Invoice Audited & Verified" if flagged == 0 else "Calculation Discrepancy Detected",
+    }
+
+
+def _build_dashboard_summary(results: list) -> dict:
+    summary = _dashboard_default_summary()
+    summary.update(_aggregate_batch(results))
+    summary["audit_overview"] = _build_audit_overview(results)
+    return summary
+
+
 def _flatten_result(pipeline_result: dict, filename: str) -> dict:
     """Chuy   n output run_full_pipeline() th nh dict ph   ng cho template."""
     def _val(obj, key, default=None):
@@ -3319,6 +3642,12 @@ def _flatten_result(pipeline_result: dict, filename: str) -> dict:
     # Prompt #3: Field warnings and low-conf count (Centralized in stage5_format)
     field_warnings = pipeline_result.get("_field_warnings", {})
     low_conf_count = pipeline_result.get("_low_conf_count", 0)
+    audit_results = pipeline_result.get("audit_results", {})
+    document_confidence = round(float(pipeline_result.get("document_confidence", 0) or 0), 3)
+    line_items = [
+        {k: _safe_cast_to_numeric_v2(extract_field_value(v)) if k in ("unit_price", "quantity", "total", "amount") else extract_field_value(v) for k, v in item.items()} if isinstance(item, dict) else item
+        for item in items
+    ]
 
     return {
         "filename":      filename,
@@ -3336,11 +3665,10 @@ def _flatten_result(pipeline_result: dict, filename: str) -> dict:
         "vat_amount":    _safe_cast_to_numeric_v2(_val(invoice, "vat_amount")),
         "total_amount":  _safe_cast_to_numeric_v2(_val(invoice, "total_amount")),
         "status":        pipeline_result.get("status", "ok"),
-        "confidence":    round(float(pipeline_result.get("document_confidence", 0) or 0), 3),
-        "line_items": [
-            {k: _safe_cast_to_numeric_v2(extract_field_value(v)) if k in ("unit_price", "quantity", "total", "amount") else extract_field_value(v) for k, v in item.items()} if isinstance(item, dict) else item
-            for item in items
-        ],   # "items" conflicts with dict.items() in Jinja2
+        "confidence":    document_confidence,
+        "audit_results": audit_results if isinstance(audit_results, dict) else {},
+        "line_items":    line_items,   # "items" conflicts with dict.items() in Jinja2
+        "line_items_audit": _build_line_item_audit_view(line_items, audit_results, document_confidence),
         "image_url":     f"/static/temp_previews/{filename}",
     }
 
@@ -3460,6 +3788,8 @@ def _normalize_dashboard_item(item: Any) -> dict:
         "status": item.get("status") or "ok",
         "confidence": _safe_cast_to_numeric_v2(item.get("confidence"), default=0),
         "line_items": item.get("line_items") if isinstance(item.get("line_items"), list) else [],
+        "line_items_audit": item.get("line_items_audit") if isinstance(item.get("line_items_audit"), list) else [],
+        "audit_results": item.get("audit_results") if isinstance(item.get("audit_results"), dict) else {},
         "image_url": item.get("image_url") or "",
     }
 
@@ -3639,6 +3969,7 @@ def upload_zip():
                     try:
                         img_bytes = zf.read(entry)
                         pipeline_result = run_full_pipeline(img_bytes, clean_name, logger, metrics)
+                        pipeline_result["audit_results"] = reconcile_invoice_data(pipeline_result)
                         _save_extraction_json(clean_name, pipeline_result)
                         flat = _flatten_result(pipeline_result, clean_name)
                         results.append(flat)
@@ -3650,8 +3981,11 @@ def upload_zip():
                     except Exception:
                         errors.append(f"{clean_name}: extraction error")
             
+            summary = _build_dashboard_summary(results)
             job_manager.update_job(job_id, "status", "completed")
             job_manager.update_job(job_id, "results", results)
+            job_manager.update_job(job_id, "summary", summary)
+            job_manager.update_job(job_id, "audit_results", summary.get("audit_overview", {}))
             job_manager.update_job(job_id, "errors", errors)
             
         except Exception as e:
@@ -3670,8 +4004,7 @@ def view_dashboard(job_id):
         return "Job not found or not completed", 404
 
     results = _normalize_dashboard_results(job.get("results", []))
-    summary = _dashboard_default_summary()
-    summary.update(_aggregate_batch(results))
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else _build_dashboard_summary(results)
 
     return render_template(
         "dashboard.html",
